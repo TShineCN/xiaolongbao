@@ -402,7 +402,7 @@
                 // 加载真实图片
                 for (let i = 0; i < anim.frameCount; i++) {
                     const img = new Image();
-                    //img.crossOrigin = "Anonymous"; // 允许跨域图片
+                    img.crossOrigin = "Anonymous"; // 允许跨域图片
                     
                     // 使用您的本地路径
                     img.src = anim.frameURLs[i];
