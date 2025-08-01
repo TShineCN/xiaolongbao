@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>动态图组合成工具</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+            background-size: 400% 400%;
+            animation: gradientBG 15s ease infinite;
+            height: 100vh;
+            overflow: hidden;
+            position: relative;
+            color: white;
+        }
+
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .background-text {
+            position: absolute;
+            font-size: 20vw;
+            font-weight: 900;
+            opacity: 0.05;
+            z-index: -1;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            white-space: nowrap;
+            user-select: none;
+        }
+
+        .container {
+            display: flex;
+            max-width: 1400px;
+            height: 90vh;
+            margin: 5vh auto;
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(10px);
+        }
+
+        .preview-area {
+            flex: 3;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 30px;
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            position: relative;
+        }
+
+        .preview-canvas {
+            max-width: 100%;
+            max-height: 100%;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            background: #000;
+        }
+
+        .control-panel {
+            flex: 2;
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+            overflow-y: auto;
+        }
+
+        .panel-title {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 28px;
+            color: #ffcc00;
+            text-shadow: 0 0 10px rgba(255, 204, 0, 0.5);
+        }
+
+        .animation-selector {
+            background: rgba(30, 30, 50, 0.8);
+            padding: 20px;
+            border-radius: 15px;
+        }
+
+        .animation-buttons {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+
+        .anim-btn {
+            flex: 1;
+            min-width: 120px;
+            padding: 12px 15px;
+            background: linear-gradient(to right, #6a11cb, #2575fc);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(37, 117, 252, 0.3);
+        }
+
+        .anim-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(37, 117, 252, 0.5);
+        }
+
+        .anim-btn.active {
+            background: linear-gradient(to right, #ff416c, #ff4b2b);
+            box-shadow: 0 0 20px rgba(255, 65, 108, 0.6);
+        }
+
+        .upload-section {
+            background: rgba(30, 30, 50, 0.8);
+            padding: 20px;
+            border-radius: 15px;
+        }
+
+        .upload-area {
+            border: 2px dashed #4a86e8;
+            border-radius: 10px;
+            padding: 30px;
+            text-align: center;
+            margin: 15px 0;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: rgba(74, 134, 232, 0.1);
+        }
+
+        .upload-area:hover {
+            background: rgba(74, 134, 232, 0.2);
+        }
+
+        .upload-icon {
+            font-size: 50px;
+            margin-bottom: 15px;
+            color: #4a86e8;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 15px;
+            margin-top: 10px;
+        }
+
+        .action-btn {
+            flex: 1;
+            padding: 15px;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .play-btn {
+            background: linear-gradient(to right, #00b09b, #96c93d);
+            color: white;
+        }
+
+        .save-btn {
+            background: linear-gradient(to right, #ff416c, #ff4b2b);
+            color: white;
+        }
+
+        .action-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .status-text {
+            text-align: center;
+            margin-top: 15px;
+            font-size: 14px;
+            color: #aaa;
+            min-height: 20px;
+        }
+
+        .preview-title {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 18px;
+            color: #ffcc00;
+            text-shadow: 0 0 5px rgba(0, 0, 0, 0.8);
+        }
+        
+        .user-image-preview {
+            max-width: 100px;
+            max-height: 100px;
+            border: 2px solid #4a86e8;
+            border-radius: 8px;
+            margin: 15px auto;
+            display: none;
+        }
+        
+        .position-info {
+            background: rgba(30, 30, 50, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+            font-size: 14px;
+            text-align: center;
+        }
+
+        @media (max-width: 900px) {
+            .container {
+                flex-direction: column;
+                height: auto;
+                margin: 20px;
+            }
+            
+            .preview-area {
+                height: 50vh;
+                border-right: none;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            }
+        }
+        
+        /* 新增进度条样式 */
+        .progress-container {
+            width: 100%;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            margin-top: 10px;
+            overflow: hidden;
+            display: none;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(to right, #00b09b, #96c93d);
+            width: 0%;
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div class="background-text">ANIMATION</div>
+    
+    <div class="container">
+        <div class="preview-area">
+            <div class="preview-title">预览区域 - <span id="animName">旋转地球</span></div>
+            <canvas id="previewCanvas" class="preview-canvas" width="800" height="450"></canvas>
+        </div>
+        
+        <div class="control-panel">
+            <h2 class="panel-title">动态图组合成工具</h2>
+            
+            <div class="animation-selector">
+                <h3>选择动画效果</h3>
+                <div class="animation-buttons">
+                    <button class="anim-btn active" data-anim="1">旋转地球</button>
+                    <button class="anim-btn" data-anim="2">跳动心形</button>
+                    <button class="anim-btn" data-anim="3">旋转立方体</button>
+                </div>
+            </div>
+            
+            <div class="upload-section">
+                <h3>上传您的图片</h3>
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-icon">📁</div>
+                    <p>点击或拖放图片到此处</p>
+                    <p class="small">支持 JPG, PNG 格式图片</p>
+                </div>
+                <img id="userImagePreview" class="user-image-preview" alt="用户上传的图片">
+                <input type="file" id="imageUpload" accept="image/*" style="display: none;">
+                
+                <div class="position-info">
+                    <p>位置已预设，无需手动调整</p>
+                    <p id="framePositionInfo">当前帧位置: (400, 225) 旋转: 0°</p>
+                </div>
+            </div>
+            
+            <div class="action-buttons">
+                <button class="action-btn play-btn" id="playBtn">播放动画</button>
+                <button class="action-btn save-btn" id="saveBtn">保存为GIF</button>
+            </div>
+            
+            <div class="status-text" id="statusText">准备好创建您的动画！</div>
+            <!-- 新增进度条 -->
+            <div class="progress-container" id="progressContainer">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 配置信息
+        const config = {
+            // 按钮配置（可轻松添加/删除/修改）
+            buttons: [
+                { id: "1", text: "旋转地球" },
+                { id: "2", text: "跳动心形" },
+                { id: "3", text: "旋转立方体" }
+            ],
+            
+            // 动画帧配置
+            animations: {
+                "1": {
+                    name: "旋转地球",
+                    frameCount: 2,
+                    frameImages: [],
+                    frameURLs: [
+                        'image1/frame0.png',
+                        'image1/frame1.png'
+                    ],
+                    // 每帧的叠加位置和旋转参数
+                    overlayPositions: [
+                        { x: 400, y: 225, rotation: 0, scale: 4 },
+                        { x: 410, y: 230, rotation: 15, scale: 4 }
+                    ]
+                },
+                "2": {
+                    name: "跳动心形",
+                    frameCount: 2,
+                    frameImages: [],
+                    frameURLs: [
+                        "https://via.placeholder.com/800x450/ff0000/ffffff?text=心形帧1",
+                        "https://via.placeholder.com/800x450/ff3333/ffffff?text=心形帧18"
+                    ],
+                    overlayPositions: [
+                        { x: 400, y: 200, rotation: 0, scale: 0.4 },
+                        { x: 400, y: 225, rotation: 0, scale: 0.46 }
+                    ]
+                },
+                "3": {
+                    name: "旋转立方体",
+                    frameCount: 2,
+                    frameImages: [],
+                    frameURLs: [
+                        "https://via.placeholder.com/800x450/6a11cb/ffffff?text=立方体帧1",
+                        "https://via.placeholder.com/800x450/6a00cc/ffffff?text=立方体帧30"
+                    ],
+                    overlayPositions: [
+                        { x: 400, y: 225, rotation: 0, scale: 0.6 },
+                        { x: 350, y: 225, rotation: 348, scale: 0.6 }
+                    ]
+                }
+            }
+        };
+
+        // DOM 元素
+        const dom = {
+            canvas: document.getElementById('previewCanvas'),
+            ctx: document.getElementById('previewCanvas').getContext('2d'),
+            uploadArea: document.getElementById('uploadArea'),
+            imageUpload: document.getElementById('imageUpload'),
+            userImagePreview: document.getElementById('userImagePreview'),
+            playBtn: document.getElementById('playBtn'),
+            saveBtn: document.getElementById('saveBtn'),
+            statusText: document.getElementById('statusText'),
+            animName: document.getElementById('animName'),
+            framePositionInfo: document.getElementById('framePositionInfo'),
+            progressContainer: document.getElementById('progressContainer'),
+            progressBar: document.getElementById('progressBar')
+        };
+
+        // 应用状态
+        const state = {
+            currentAnimation: '1',
+            userImage: null,
+            isPlaying: false,
+            currentFrame: 0,
+            frameInterval: null,
+            composedFrames: {}
+        };
+
+        // 初始化函数
+        function init() {
+            setupButtons();
+            setupEventListeners();
+            preloadFrameImages();
+            renderFrame(0);
+        }
+
+        // 预加载帧图片 - 修改后的函数
+        function preloadFrameImages() {
+            Object.keys(config.animations).forEach(animId => {
+                const anim = config.animations[animId];
+                anim.frameImages = []; // 清空数组
+                
+                // 加载真实图片
+                for (let i = 0; i < anim.frameCount; i++) {
+                    const img = new Image();
+                    //img.crossOrigin = "Anonymous"; // 允许跨域图片
+                    
+                    // 使用您的本地路径
+                    img.src = anim.frameURLs[i];
+                    
+                    img.onload = () => {
+                        dom.statusText.textContent = `加载中: ${anim.name} (${i+1}/${anim.frameCount})`;
+                        
+                        // 全部加载完成后更新状态
+                        if (i === anim.frameCount - 1) {
+                            dom.statusText.textContent = `${anim.name} 加载完成`;
+                        }
+                    };
+                    
+                    img.onerror = () => {
+                        console.error(`无法加载图片: ${anim.frameURLs[i]}`);
+                        dom.statusText.textContent = `错误: 无法加载图片 ${i+1}`;
+                    };
+                    
+                    anim.frameImages.push(img);
+                }
+            });
+        }
+
+        // 设置动画选择按钮
+        function setupButtons() {
+            const container = document.querySelector('.animation-buttons');
+            container.innerHTML = '';
+            
+            config.buttons.forEach(btn => {
+                const button = document.createElement('button');
+                button.className = `anim-btn ${btn.id === state.currentAnimation ? 'active' : ''}`;
+                button.dataset.anim = btn.id;
+                button.textContent = btn.text;
+                button.addEventListener('click', () => {
+                    document.querySelector('.anim-btn.active').classList.remove('active');
+                    button.classList.add('active');
+                    changeAnimation(btn.id);
+                });
+                container.appendChild(button);
+            });
+        }
+
+        // 设置事件监听器
+        function setupEventListeners() {
+            // 上传区域点击事件
+            dom.uploadArea.addEventListener('click', () => dom.imageUpload.click());
+            
+            // 文件上传事件
+            dom.imageUpload.addEventListener('change', handleImageUpload);
+            
+            // 播放按钮事件
+            dom.playBtn.addEventListener('click', toggleAnimation);
+            
+            // 保存按钮事件
+            dom.saveBtn.addEventListener('click', saveAsGif);
+            
+            // 允许拖放上传
+            dom.uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dom.uploadArea.style.background = 'rgba(74, 134, 232, 0.3)';
+            });
+            
+            dom.uploadArea.addEventListener('dragleave', () => {
+                dom.uploadArea.style.background = 'rgba(74, 134, 232, 0.1)';
+            });
+            
+            dom.uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dom.uploadArea.style.background = 'rgba(74, 134, 232, 0.1)';
+                
+                if (e.dataTransfer.files.length) {
+                    dom.imageUpload.files = e.dataTransfer.files;
+                    handleImageUpload();
+                }
+            });
+        }
+
+        // 处理图片上传
+        function handleImageUpload() {
+            const file = dom.imageUpload.files[0];
+            if (!file) return;
+            
+            if (!file.type.match('image.*')) {
+                dom.statusText.textContent = '请上传图片文件 (JPG, PNG)';
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                state.userImage = new Image();
+                state.userImage.src = e.target.result;
+                state.userImage.onload = () => {
+                    dom.statusText.textContent = '图片上传成功!';
+                    dom.userImagePreview.src = state.userImage.src;
+                    dom.userImagePreview.style.display = 'block';
+                    
+                    // 清除缓存
+                    state.composedFrames = {};
+                    
+                    // 更新显示
+                    renderFrame(state.currentFrame);
+                };
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // 更改当前动画
+        function changeAnimation(animId) {
+            stopAnimation();
+            state.currentAnimation = animId;
+            state.currentFrame = 0;
+            dom.animName.textContent = config.animations[animId].name;
+            renderFrame(0);
+            dom.statusText.textContent = `已选择: ${config.animations[animId].name}`;
+        }
+
+        // 渲染指定帧 - 修改后的函数
+        function renderFrame(frameIndex) {
+            const anim = config.animations[state.currentAnimation];
+            const canvas = dom.canvas;
+            const ctx = dom.ctx;
+            
+            // 清空画布
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 绘制背景帧 - 使用真实图片
+            if (anim.frameImages[frameIndex] && anim.frameImages[frameIndex].complete) {
+                ctx.drawImage(anim.frameImages[frameIndex], 0, 0, canvas.width, canvas.height);
+            } else {
+                // 如果图片未加载完成，显示占位背景
+                ctx.fillStyle = '#222';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 24px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(`加载中: ${anim.name} 帧 ${frameIndex+1}`, canvas.width/2, canvas.height/2);
+            }
+            
+            // 如果用户上传了图片，则绘制
+            if (state.userImage) {
+                const pos = anim.overlayPositions[frameIndex];
+                const imgWidth = state.userImage.width * pos.scale;
+                const imgHeight = state.userImage.height * pos.scale;
+                
+                ctx.save();
+                ctx.translate(pos.x, pos.y);
+                ctx.rotate(pos.rotation * Math.PI / 180);
+                
+                // 绘制用户图片
+                ctx.drawImage(
+                    state.userImage, 
+                    -imgWidth/2, 
+                    -imgHeight/2,
+                    imgWidth,
+                    imgHeight
+                );
+                
+                ctx.restore();
+                
+                // 更新位置信息
+                dom.framePositionInfo.textContent = 
+                    `当前帧位置: (${pos.x}, ${pos.y}) 旋转: ${pos.rotation}°`;
+            }
+        }
+
+        // 切换动画播放状态
+        function toggleAnimation() {
+            if (state.isPlaying) {
+                stopAnimation();
+            } else {
+                startAnimation();
+            }
+        }
+
+        // 开始播放动画
+        function startAnimation() {
+            if (!state.userImage) {
+                dom.statusText.textContent = '请先上传图片！';
+                return;
+            }
+            
+            const anim = config.animations[state.currentAnimation];
+            state.isPlaying = true;
+            dom.playBtn.textContent = '停止播放';
+            dom.playBtn.style.background = 'linear-gradient(to right, #ff416c, #ff4b2b)';
+            
+            state.frameInterval = setInterval(() => {
+                state.currentFrame = (state.currentFrame + 1) % anim.frameCount;
+                renderFrame(state.currentFrame);
+            }, 100);
+        }
+
+        // 停止播放动画
+        function stopAnimation() {
+            if (state.frameInterval) {
+                clearInterval(state.frameInterval);
+            }
+            state.isPlaying = false;
+            dom.playBtn.textContent = '播放动画';
+            dom.playBtn.style.background = 'linear-gradient(to right, #00b09b, #96c93d)';
+        }
+
+        // 保存为GIF - 修复后的函数
+        function saveAsGif() {
+            if (!state.userImage) {
+                dom.statusText.textContent = '请先上传图片！';
+                return;
+            }
+            
+            dom.statusText.textContent = '正在生成GIF...';
+            dom.saveBtn.disabled = true;
+            dom.progressContainer.style.display = 'block';
+            dom.progressBar.style.width = '0%';
+            
+            const anim = config.animations[state.currentAnimation];
+            const gif = new GIF({
+                workers: 2,
+                quality: 10,
+                width: dom.canvas.width,
+                height: dom.canvas.height
+            });
+            
+            // 创建离屏canvas
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = dom.canvas.width;
+            tempCanvas.height = dom.canvas.height;
+            const tempCtx = tempCanvas.getContext('2d');
+            
+            // 添加每一帧到GIF
+            for (let i = 0; i < anim.frameCount; i++) {
+                // 绘制背景帧
+                tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+                tempCtx.drawImage(anim.frameImages[i], 0, 0);
+                
+                // 绘制用户图片（使用预设位置）
+                const pos = anim.overlayPositions[i];
+                const imgWidth = state.userImage.width * pos.scale;
+                const imgHeight = state.userImage.height * pos.scale;
+                
+                tempCtx.save();
+                tempCtx.translate(pos.x, pos.y);
+                tempCtx.rotate(pos.rotation * Math.PI / 180);
+                tempCtx.drawImage(
+                    state.userImage, 
+                    -imgWidth/2, 
+                    -imgHeight/2,
+                    imgWidth,
+                    imgHeight
+                );
+                tempCtx.restore();
+                
+                // 添加到GIF (修复点：传递canvas元素而不是上下文)
+                gif.addFrame(tempCanvas, { delay: 100, copy: true });
+                
+                // 更新进度条
+                const progress = ((i + 1) / anim.frameCount) * 100;
+                dom.progressBar.style.width = `${progress}%`;
+            }
+            
+            // 生成GIF
+            gif.on('finished', function(blob) {
+                saveAs(blob, 'animation.gif');
+                dom.statusText.textContent = 'GIF保存成功！';
+                dom.saveBtn.disabled = false;
+                dom.progressContainer.style.display = 'none';
+            });
+            
+            gif.on('progress', function(p) {
+                // 进度事件处理（如果需要更精确的进度）
+            });
+            
+            gif.on('abort', function() {
+                dom.statusText.textContent = 'GIF生成已中止';
+                dom.saveBtn.disabled = false;
+                dom.progressContainer.style.display = 'none';
+            });
+            
+            gif.render();
+        }
+
+        // 页面加载完成后初始化
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
