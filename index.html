@@ -6,7 +6,8 @@
     <title>动态图组合成工具</title>
     <!-- 使用可靠的GIF生成库 -->
     <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/gifshot@0.4.5/dist/gifshot.min.js"></script>
+    <!-- 引入独立的GIF生成器 -->
+    <script src="gifGenerator.js"></script>
     <style>
         * {
             margin: 0;
@@ -655,13 +656,23 @@
             currentFrame: 0,
             frameInterval: null,
             composedFrames: {},
-            playSpeed: 1.0 // 播放速度倍数，1.0 = 200ms/帧
+            playSpeed: 1.0, // 播放速度倍数，1.0 = 200ms/帧
+            gifGenerator: null // GIF生成器实例
         };
 
         // 初始化函数
         function init() {
             // 添加这一行解决跨域问题
             dom.ctx = dom.canvas.getContext('2d', { willReadFrequently: true });
+            
+            // 初始化GIF生成器
+            if (typeof GifGenerator !== 'undefined') {
+                state.gifGenerator = new GifGenerator();
+                console.log('GIF生成器初始化成功');
+            } else {
+                console.warn('GIF生成器未加载');
+            }
+            
             setupButtons();
             setupEventListeners();
             setupSpeedControl();
@@ -1013,471 +1024,203 @@
         // 合成并保存图片到images文件夹用于测试
         async function saveComposedImages() {
             if (!state.userImage || !state.userImage.complete) {
-                dom.statusText.textContent = '请先上传图片！';
+                updateProgress('请先上传图片！');
                 return;
             }
             
             const anim = config.animations[state.currentAnimation];
+            const { width: canvasWidth, height: canvasHeight } = getBackgroundDimensions();
             
             try {
                 for (let i = 0; i < anim.frameCount; i++) {
-                    dom.statusText.textContent = `正在合成第 ${i + 1}/${anim.frameCount} 帧...`;
+                    updateProgress(`正在合成第 ${i + 1}/${anim.frameCount} 帧...`);
                     
-                    // 获取背景图片的原始尺寸
-                    let canvasWidth = 800;
-                    let canvasHeight = 800;
-                    
-                    if (anim.frameImages[i] && anim.frameImages[i].complete) {
-                        canvasWidth = anim.frameImages[i].naturalWidth;
-                        canvasHeight = anim.frameImages[i].naturalHeight;
-                    }
-                    
-                    // 创建合成canvas，使用背景图片的原始尺寸
-                    const compositeCanvas = document.createElement('canvas');
-                    compositeCanvas.width = canvasWidth;
-                    compositeCanvas.height = canvasHeight;
-                    const ctx = compositeCanvas.getContext('2d');
-                    
-                    // 绘制背景图片（不需要居中，直接以原始尺寸绘制）
-                    if (anim.frameImages[i] && anim.frameImages[i].complete) {
-                        const bgImg = anim.frameImages[i];
-                        ctx.drawImage(bgImg, 0, 0, canvasWidth, canvasHeight);
-                    }
-                    
-                    // 绘制用户图片（按原始坐标系调整位置）
-                    if (state.processedUserImage) {
-                        const pos = anim.overlayPositions[i];
-                        
-                        // 按比例调整位置（800x800 -> 原始尺寸）
-                        const scaleX = canvasWidth / 800;
-                        const scaleY = canvasHeight / 800;
-                        
-                        ctx.save();
-                        ctx.translate(pos.x * scaleX, pos.y * scaleY);
-                        ctx.rotate(pos.rotation * Math.PI / 180);
-                        
-                        const imgWidth = state.processedUserImage.width * pos.scale * scaleX;
-                        const imgHeight = state.processedUserImage.height * pos.scale * scaleY;
-                        
-                        ctx.drawImage(
-                            state.processedUserImage, 
-                            -imgWidth/2, 
-                            -imgHeight/2,
-                            imgWidth,
-                            imgHeight
-                        );
-                        ctx.restore();
-                    }
-                    
-                    // 转换为blob并保存
-                    const blob = await new Promise(resolve => {
-                        compositeCanvas.toBlob(resolve, 'image/png', 1.0);
-                    });
-                    
-                    // 下载合成后的图片
-                    const fileName = `composed_frame_${i}.png`;
-                    downloadImage(blob, fileName);
-                    
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                }
-                
-                dom.statusText.textContent = '合成图片保存完成！';
-            } catch (error) {
-                console.error('合成图片失败:', error);
-                dom.statusText.textContent = '合成图片失败';
-            }
-        }
-        
-        // 下载单张图片
-        function downloadImage(blob, fileName) {
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = fileName;
-            a.style.display = 'none';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
-        }
-        
-        // 使用gifshot库作为主要方法，因为它不需要外部worker文件
-        async function saveAsGif() {
-            if (!state.userImage || !state.userImage.complete) {
-                dom.statusText.textContent = '请先上传图片！';
-                return;
-            }
-            
-            // 优先使用gifshot库
-            if (typeof gifshot !== 'undefined') {
-                await saveAsGifWithGifshot();
-            } else if (typeof GIF !== 'undefined') {
-                await saveAsGifWithGifjs();
-            } else {
-                dom.statusText.textContent = 'GIF库未加载，请刷新页面重试';
-                return;
-            }
-        }
-        
-        // 使用gifshot库生成GIF（不需要worker文件）
-        async function saveAsGifWithGifshot() {
-            dom.statusText.textContent = '正在生成GIF...';
-            dom.saveBtn.disabled = true;
-            dom.progressContainer.style.display = 'block';
-            dom.progressBar.style.width = '0%';
-            
-            const anim = config.animations[state.currentAnimation];
-            
-            // 计算GIF延时（gifshot使用秒为单位）
-            const frameDelay = (200 / state.playSpeed) / 1000;
-            
-            try {
-                console.log(`使用gifshot生成GIF: ${anim.name}, 帧数: ${anim.frameCount}, 延时: ${frameDelay}s`);
-                
-                // 获取背景图片的原始尺寸
-                let canvasWidth = 800;
-                let canvasHeight = 800;
-                
-                if (anim.frameImages[0] && anim.frameImages[0].complete) {
-                    canvasWidth = anim.frameImages[0].naturalWidth;
-                    canvasHeight = anim.frameImages[0].naturalHeight;
-                }
-                
-                // 生成所有帧的canvas数组
-                const frameCanvases = [];
-                
-                for (let i = 0; i < anim.frameCount; i++) {
-                    dom.statusText.textContent = `正在处理第 ${i + 1}/${anim.frameCount} 帧...`;
-                    
-                    // 创建合成canvas，使用背景图片的原始尺寸
-                    const compositeCanvas = document.createElement('canvas');
-                    compositeCanvas.width = canvasWidth;
-                    compositeCanvas.height = canvasHeight;
-                    const ctx = compositeCanvas.getContext('2d');
-                    
-                    // 绘制背景图片
-                    if (anim.frameImages[i] && anim.frameImages[i].complete) {
-                        const bgImg = anim.frameImages[i];
-                        ctx.drawImage(bgImg, 0, 0, canvasWidth, canvasHeight);
-                    } else {
-                        ctx.fillStyle = '#000';
-                        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-                    }
-                    
-                    // 绘制用户图片
-                    if (state.processedUserImage) {
-                        const pos = anim.overlayPositions[i];
-                        
-                        // 按比例调整位置（800x800 -> 原始尺寸）
-                        const scaleX = canvasWidth / 800;
-                        const scaleY = canvasHeight / 800;
-                        
-                        ctx.save();
-                        ctx.translate(pos.x * scaleX, pos.y * scaleY);
-                        ctx.rotate(pos.rotation * Math.PI / 180);
-                        
-                        const imgWidth = state.processedUserImage.width * pos.scale * scaleX;
-                        const imgHeight = state.processedUserImage.height * pos.scale * scaleY;
-                        
-                        ctx.drawImage(
-                            state.processedUserImage, 
-                            -imgWidth/2, 
-                            -imgHeight/2,
-                            imgWidth,
-                            imgHeight
-                        );
-                        ctx.restore();
-                    }
-                    
-                    frameCanvases.push(compositeCanvas);
-                    
-                    // 更新进度
-                    const progress = ((i + 1) / anim.frameCount) * 30;
-                    dom.progressBar.style.width = `${progress}%`;
-                    
-                    await new Promise(resolve => setTimeout(resolve, 10));
-                }
-                
-                dom.statusText.textContent = '正在生成GIF文件...';
-                dom.progressBar.style.width = '40%';
-                
-                // 使用gifshot生成GIF
-                gifshot.createGIF({
-                    images: frameCanvases,
-                    interval: frameDelay,
-                    gifWidth: canvasWidth,
-                    gifHeight: canvasHeight,
-                    quality: 10,
-                    numWorkers: 0, // 禁用workers避免404错误
-                    progressCallback: function(captureProgress) {
-                        const totalProgress = 40 + (captureProgress * 50);
-                        dom.progressBar.style.width = `${totalProgress}%`;
-                        dom.statusText.textContent = `正在生成GIF... ${Math.round(totalProgress)}%`;
-                    },
-                    completeCallback: function() {
-                        dom.statusText.textContent = '正在准备下载...';
-                        dom.progressBar.style.width = '95%';
-                    }
-                }, function(obj) {
-                    if (!obj.error) {
-                        console.log('GIF生成成功');
-                        dom.progressBar.style.width = '100%';
-                        
-                        // 创建blob并下载
-                        const byteCharacters = atob(obj.image.split(',')[1]);
-                        const byteNumbers = new Array(byteCharacters.length);
-                        for (let i = 0; i < byteCharacters.length; i++) {
-                            byteNumbers[i] = byteCharacters.charCodeAt(i);
-                        }
-                        const byteArray = new Uint8Array(byteNumbers);
-                        const blob = new Blob([byteArray], {type: 'image/gif'});
-                        
-                        console.log('GIF文件大小:', (blob.size / 1024 / 1024).toFixed(2), 'MB');
-                        
-                        const fileName = `${anim.name.replace(/\s+/g, '_')}_动画_${state.playSpeed}x速度.gif`;
-                        downloadGif(blob, fileName);
-                        
-                    } else {
-                        console.error('gifshot生成失败:', obj.error);
-                        dom.statusText.textContent = 'gifshot失败，尝试备选方法...';
-                        saveAsGifWithGifjs();
-                    }
-                });
-                
-            } catch (error) {
-                console.error('gifshot出错:', error);
-                dom.statusText.textContent = 'gifshot出错，尝试备选方法...';
-                saveAsGifWithGifjs();
-            }
-        }
-        
-        // 使用gif.js库生成GIF（禁用workers避免404错误）
-        async function saveAsGifWithGifjs() {
-            try {
-                dom.statusText.textContent = '使用备选方法生成GIF...';
-                
-                const anim = config.animations[state.currentAnimation];
-                const frameDelay = Math.round(200 / state.playSpeed);
-                
-                // 获取背景图片的原始尺寸
-                let canvasWidth = 800;
-                let canvasHeight = 800;
-                
-                if (anim.frameImages[0] && anim.frameImages[0].complete) {
-                    canvasWidth = anim.frameImages[0].naturalWidth;
-                    canvasHeight = anim.frameImages[0].naturalHeight;
-                }
-                
-                // 创建GIF实例，禁用workers
-                const gif = new GIF({
-                    workers: 0, // 禁用workers避免404错误
-                    quality: 10,
-                    width: canvasWidth,
-                    height: canvasHeight,
-                    repeat: 0
-                });
-                
-                // 生成所有帧并添加到GIF
-                for (let i = 0; i < anim.frameCount; i++) {
-                    dom.statusText.textContent = `备选方法处理第 ${i + 1}/${anim.frameCount} 帧...`;
-                    
-                    const compositeCanvas = document.createElement('canvas');
-                    compositeCanvas.width = canvasWidth;
-                    compositeCanvas.height = canvasHeight;
-                    const ctx = compositeCanvas.getContext('2d');
-                    
-                    // 绘制背景图片
-                    if (anim.frameImages[i] && anim.frameImages[i].complete) {
-                        const bgImg = anim.frameImages[i];
-                        ctx.drawImage(bgImg, 0, 0, canvasWidth, canvasHeight);
-                    } else {
-                        ctx.fillStyle = '#000';
-                        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-                    }
-                    
-                    // 绘制用户图片
-                    if (state.processedUserImage) {
-                        const pos = anim.overlayPositions[i];
-                        
-                        // 按比例调整位置（800x800 -> 原始尺寸）
-                        const scaleX = canvasWidth / 800;
-                        const scaleY = canvasHeight / 800;
-                        
-                        ctx.save();
-                        ctx.translate(pos.x * scaleX, pos.y * scaleY);
-                        ctx.rotate(pos.rotation * Math.PI / 180);
-                        
-                        const imgWidth = state.processedUserImage.width * pos.scale * scaleX;
-                        const imgHeight = state.processedUserImage.height * pos.scale * scaleY;
-                        
-                        ctx.drawImage(
-                            state.processedUserImage,
-                            -imgWidth/2,
-                            -imgHeight/2,
-                            imgWidth,
-                            imgHeight
-                        );
-                        ctx.restore();
-                    }
-                    
-                    gif.addFrame(compositeCanvas, {delay: frameDelay});
-                    
-                    const progress = 40 + ((i + 1) / anim.frameCount) * 30;
-                    dom.progressBar.style.width = `${progress}%`;
-                    
-                    await new Promise(resolve => setTimeout(resolve, 50));
-                }
-                
-                dom.statusText.textContent = '正在渲染备选GIF...';
-                
-                // 设置超时防止卡死
-                const timeout = setTimeout(() => {
-                    console.log('GIF渲染超时，使用图片序列下载');
-                    saveAsImageSequence();
-                }, 30000);
-                
-                gif.on('finished', (blob) => {
-                    clearTimeout(timeout);
-                    console.log('备选GIF生成成功');
-                    const fileName = `${anim.name.replace(/\s+/g, '_')}_动画_${state.playSpeed}x速度.gif`;
-                    downloadGif(blob, fileName);
-                });
-                
-                gif.on('progress', (progress) => {
-                    const totalProgress = 70 + (progress * 30);
-                    dom.progressBar.style.width = `${totalProgress}%`;
-                    dom.statusText.textContent = `正在渲染备选GIF... ${Math.round(totalProgress)}%`;
-                });
-                
-                gif.on('error', (error) => {
-                    clearTimeout(timeout);
-                    console.error('备选GIF失败:', error);
-                    saveAsImageSequence();
-                });
-                
-                gif.render();
-                
-            } catch (error) {
-                console.error('备选方法失败:', error);
-                saveAsImageSequence();
-            }
-        }
-        
-        // 最终备选：下载图片序列
-        async function saveAsImageSequence() {
-            try {
-                dom.statusText.textContent = '生成图片序列作为备选...';
-                
-                const anim = config.animations[state.currentAnimation];
-                
-                // 获取背景图片的原始尺寸
-                let canvasWidth = 800;
-                let canvasHeight = 800;
-                
-                if (anim.frameImages[0] && anim.frameImages[0].complete) {
-                    canvasWidth = anim.frameImages[0].naturalWidth;
-                    canvasHeight = anim.frameImages[0].naturalHeight;
-                }
-                
-                for (let i = 0; i < anim.frameCount; i++) {
-                    dom.statusText.textContent = `正在生成第 ${i + 1}/${anim.frameCount} 帧图片...`;
-                    
-                    const compositeCanvas = document.createElement('canvas');
-                    compositeCanvas.width = canvasWidth;
-                    compositeCanvas.height = canvasHeight;
-                    const ctx = compositeCanvas.getContext('2d');
-                    
-                    // 绘制背景图片
-                    if (anim.frameImages[i] && anim.frameImages[i].complete) {
-                        const bgImg = anim.frameImages[i];
-                        ctx.drawImage(bgImg, 0, 0, canvasWidth, canvasHeight);
-                    }
-                    
-                    // 绘制用户图片
-                    if (state.processedUserImage) {
-                        const pos = anim.overlayPositions[i];
-                        
-                        // 按比例调整位置（800x800 -> 原始尺寸）
-                        const scaleX = canvasWidth / 800;
-                        const scaleY = canvasHeight / 800;
-                        
-                        ctx.save();
-                        ctx.translate(pos.x * scaleX, pos.y * scaleY);
-                        ctx.rotate(pos.rotation * Math.PI / 180);
-                        
-                        const imgWidth = state.processedUserImage.width * pos.scale * scaleX;
-                        const imgHeight = state.processedUserImage.height * pos.scale * scaleY;
-                        
-                        ctx.drawImage(
-                            state.processedUserImage, 
-                            -imgWidth/2, 
-                            -imgHeight/2,
-                            imgWidth,
-                            imgHeight
-                        );
-                        ctx.restore();
-                    }
+                    // 使用公共的帧合成函数
+                    const compositeCanvas = await createCompositeFrame(i, canvasWidth, canvasHeight);
                     
                     // 转换为blob并下载
                     const blob = await new Promise(resolve => {
                         compositeCanvas.toBlob(resolve, 'image/png', 1.0);
                     });
                     
-                    const fileName = `${anim.name.replace(/\s+/g, '_')}_frame_${i}.png`;
+                    const fileName = `composed_frame_${i}.png`;
                     downloadImage(blob, fileName);
                     
-                    const progress = 70 + ((i + 1) / anim.frameCount) * 30;
-                    dom.progressBar.style.width = `${progress}%`;
-                    
-                    await new Promise(resolve => setTimeout(resolve, 200));
+                    await new Promise(resolve => setTimeout(resolve, 100));
                 }
                 
-                dom.statusText.textContent = '图片序列下载完成！请手动制作GIF。';
-                dom.progressBar.style.width = '100%';
-                setTimeout(resetSaveButton, 2000);
-                
+                updateProgress('合成图片保存完成！');
             } catch (error) {
-                console.error('图片序列生成失败:', error);
-                dom.statusText.textContent = '所有方法都失败了，请检查浏览器兼容性';
-                resetSaveButton();
+                console.error('合成图片失败:', error);
+                updateProgress('合成图片失败');
             }
         }
         
-        // 下载GIF文件
-        function downloadGif(blob, animName) {
+        // 通用下载函数
+        function downloadFile(blob, fileName, fileType = 'image/png') {
             try {
-                const fileName = `${animName.replace(/\s+/g, '_')}_动画_${state.playSpeed}x速度.gif`;
-                
-                // 创建下载链接
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
                 a.download = fileName;
                 a.style.display = 'none';
-                
-                // 触发下载
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
-                
-                // 清理URL
                 setTimeout(() => URL.revokeObjectURL(url), 1000);
+                return true;
+            } catch (error) {
+                console.error(`下载${fileType}失败:`, error);
+                return false;
+            }
+        }
+        
+        // 下载单张图片
+        function downloadImage(blob, fileName) {
+            return downloadFile(blob, fileName, 'PNG图片');
+        }
+        
+        // 获取背景图片尺寸的通用函数
+        function getBackgroundDimensions(animationId) {
+            const anim = config.animations[animationId || state.currentAnimation];
+            let canvasWidth = 800;
+            let canvasHeight = 800;
+            
+            if (anim.frameImages[0] && anim.frameImages[0].complete) {
+                canvasWidth = anim.frameImages[0].naturalWidth;
+                canvasHeight = anim.frameImages[0].naturalHeight;
+            }
+            
+            return { width: canvasWidth, height: canvasHeight };
+        }
+        
+        // 更新状态文本和进度的通用函数
+        function updateProgress(text, progress = null) {
+            dom.statusText.textContent = text;
+            if (progress !== null) {
+                dom.progressBar.style.width = `${progress}%`;
+            }
+        }
+        
+        // 使用新的GIF生成器保存GIF
+        async function saveAsGif() {
+            if (!state.userImage || !state.userImage.complete) {
+                updateProgress('请先上传图片！');
+                return;
+            }
+            
+            if (!state.gifGenerator) {
+                updateProgress('GIF生成器未初始化，请刷新页面重试');
+                return;
+            }
+            
+            updateProgress('正在生成GIF...', 0);
+            dom.saveBtn.disabled = true;
+            dom.progressContainer.style.display = 'block';
+            
+            try {
+                const anim = config.animations[state.currentAnimation];
+                const { width: canvasWidth, height: canvasHeight } = getBackgroundDimensions();
                 
-                // 更新UI
-                dom.statusText.textContent = 'GIF保存成功！';
-                dom.progressBar.style.width = '100%';
+                // 生成所有帧的canvas数组
+                const frameCanvases = [];
                 
-                setTimeout(() => {
-                    resetSaveButton();
-                }, 2000);
+                for (let i = 0; i < anim.frameCount; i++) {
+                    updateProgress(`正在处理第 ${i + 1}/${anim.frameCount} 帧...`, ((i + 1) / anim.frameCount) * 50);
+                    
+                    const frameCanvas = await createCompositeFrame(i, canvasWidth, canvasHeight);
+                    frameCanvases.push(frameCanvas);
+                    
+                    await new Promise(resolve => setTimeout(resolve, 10));
+                }
                 
-                console.log(`GIF下载成功: ${fileName}, 大小: ${(blob.size / 1024 / 1024).toFixed(2)}MB`);
+                updateProgress('正在生成GIF文件...');
+                
+                // 使用新的GIF生成器
+                const frameDelay = Math.round(200 / state.playSpeed);
+                const blob = await state.gifGenerator.createGif(frameCanvases, {
+                    width: canvasWidth,
+                    height: canvasHeight,
+                    frameDelay: frameDelay,
+                    quality: 10,
+                    onProgress: (progress) => {
+                        const totalProgress = 50 + (progress * 50);
+                        updateProgress(`正在生成GIF... ${Math.round(totalProgress)}%`, totalProgress);
+                    }
+                });
+                
+                const fileName = `${anim.name.replace(/\s+/g, '_')}_动画_${state.playSpeed}x速度.gif`;
+                const success = downloadFile(blob, fileName, 'GIF动画');
+                
+                if (success) {
+                    updateProgress('GIF保存成功！', 100);
+                    console.log(`GIF下载成功: ${fileName}, 大小: ${(blob.size / 1024 / 1024).toFixed(2)}MB`);
+                } else {
+                    updateProgress('下载失败，请重试');
+                }
+                
+                setTimeout(resetSaveButton, 2000);
                 
             } catch (error) {
-                console.error('下载GIF失败:', error);
-                dom.statusText.textContent = '下载失败，请重试';
+                console.error('GIF生成失败:', error);
+                updateProgress(`GIF生成失败: ${error.message}`);
                 resetSaveButton();
             }
+        }
+        
+        // 创建合成帧
+        async function createCompositeFrame(frameIndex, canvasWidth, canvasHeight) {
+            const anim = config.animations[state.currentAnimation];
+            
+            // 创建合成canvas，使用背景图片的原始尺寸
+            const compositeCanvas = document.createElement('canvas');
+            compositeCanvas.width = canvasWidth;
+            compositeCanvas.height = canvasHeight;
+            const ctx = compositeCanvas.getContext('2d');
+            
+            // 绘制背景图片
+            if (anim.frameImages[frameIndex] && anim.frameImages[frameIndex].complete) {
+                const bgImg = anim.frameImages[frameIndex];
+                ctx.drawImage(bgImg, 0, 0, canvasWidth, canvasHeight);
+            } else {
+                // 如果背景图片未加载，使用黑色背景
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+            }
+            
+            // 绘制用户图片
+            if (state.processedUserImage) {
+                const pos = anim.overlayPositions[frameIndex];
+                
+                // 计算背景图片在800x800canvas中的偏移量
+                const bgOffsetX = (800 - canvasWidth) / 2;
+                const bgOffsetY = (800 - canvasHeight) / 2;
+                
+                // 计算用户图片相对于背景图片的位置
+                const relativeX = pos.x - bgOffsetX;
+                const relativeY = pos.y - bgOffsetY;
+                
+                // 确保用户图片位置在背景图片范围内
+                if (relativeX >= 0 && relativeX <= canvasWidth && relativeY >= 0 && relativeY <= canvasHeight) {
+                    ctx.save();
+                    ctx.translate(relativeX, relativeY);
+                    ctx.rotate(pos.rotation * Math.PI / 180);
+                    
+                    const imgWidth = state.processedUserImage.width * pos.scale;
+                    const imgHeight = state.processedUserImage.height * pos.scale;
+                    
+                    ctx.drawImage(
+                        state.processedUserImage,
+                        -imgWidth/2,
+                        -imgHeight/2,
+                        imgWidth,
+                        imgHeight
+                    );
+                    ctx.restore();
+                }
+            }
+            
+            return compositeCanvas;
         }
         
         // 重置保存按钮状态
