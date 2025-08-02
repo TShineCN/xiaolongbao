@@ -1,6 +1,7 @@
 /**
- * CSP友好的GIF编码器
+ * CSP友好的GIF编码器 - 修复版本
  * 纯JavaScript实现，不使用eval()或其他被CSP限制的功能
+ * 修复颜色处理和LZW压缩问题
  */
 class CSPFriendlyGifEncoder {
     constructor() {
@@ -9,7 +10,8 @@ class CSPFriendlyGifEncoder {
         this.width = 0;
         this.height = 0;
         this.onProgress = null;
-        console.log('CSP友好的GIF编码器初始化');
+        this.globalPalette = null;
+        console.log('CSP友好的GIF编码器初始化（修复版）');
     }
 
     /**
@@ -41,6 +43,73 @@ class CSPFriendlyGifEncoder {
     }
 
     /**
+     * 生成简化的调色板（216色web安全色 + 40种灰色）
+     */
+    generatePalette() {
+        const palette = [];
+        
+        // 生成216色web安全色
+        for (let r = 0; r < 6; r++) {
+            for (let g = 0; g < 6; g++) {
+                for (let b = 0; b < 6; b++) {
+                    palette.push([
+                        Math.floor(r * 255 / 5),
+                        Math.floor(g * 255 / 5),
+                        Math.floor(b * 255 / 5)
+                    ]);
+                }
+            }
+        }
+        
+        // 添加灰色调色板
+        for (let i = 0; i < 40; i++) {
+            const gray = Math.floor(i * 255 / 39);
+            palette.push([gray, gray, gray]);
+        }
+        
+        // 确保调色板有256种颜色
+        while (palette.length < 256) {
+            palette.push([0, 0, 0]);
+        }
+        
+        this.globalPalette = palette;
+        console.log(`生成调色板: ${palette.length} 种颜色`);
+        return palette;
+    }
+
+    /**
+     * 计算颜色距离
+     */
+    colorDistance(c1, c2) {
+        const dr = c1[0] - c2[0];
+        const dg = c1[1] - c2[1];
+        const db = c1[2] - c2[2];
+        return dr * dr + dg * dg + db * db;
+    }
+
+    /**
+     * 将RGB颜色映射到调色板索引
+     */
+    mapColorToPalette(r, g, b) {
+        if (!this.globalPalette) {
+            this.generatePalette();
+        }
+        
+        let bestIndex = 0;
+        let bestDistance = Infinity;
+        
+        for (let i = 0; i < this.globalPalette.length; i++) {
+            const distance = this.colorDistance([r, g, b], this.globalPalette[i]);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                bestIndex = i;
+            }
+        }
+        
+        return bestIndex;
+    }
+
+    /**
      * 生成GIF数据
      * @returns {Uint8Array} GIF数据
      */
@@ -50,6 +119,9 @@ class CSPFriendlyGifEncoder {
         }
 
         console.log(`开始编码GIF: ${this.width}x${this.height}, ${this.frames.length}帧`);
+
+        // 生成调色板
+        this.generatePalette();
 
         // GIF数据缓冲区
         const buffer = [];
@@ -113,17 +185,12 @@ class CSPFriendlyGifEncoder {
     }
 
     /**
-     * 写入全局颜色表 (简化的256色调色板)
+     * 写入全局颜色表
      */
     writeGlobalColorTable(buffer) {
-        // 创建一个简化的256色调色板
         for (let i = 0; i < 256; i++) {
-            // 使用简单的RGB映射
-            const r = (i & 0xE0) | ((i & 0xE0) >> 3) | ((i & 0xC0) >> 6);
-            const g = ((i & 0x1C) << 3) | (i & 0x1C) | ((i & 0x18) >> 2);
-            const b = ((i & 0x03) << 6) | ((i & 0x03) << 4) | ((i & 0x03) << 2) | (i & 0x03);
-            
-            buffer.push(r, g, b);
+            const color = this.globalPalette[i] || [0, 0, 0];
+            buffer.push(color[0], color[1], color[2]);
         }
     }
 
@@ -164,7 +231,7 @@ class CSPFriendlyGifEncoder {
         // 处置方法 | 用户输入标志 | 透明颜色标志
         buffer.push(0x04); // 不处置
         // 延迟时间 (单位: 1/100秒)
-        const delay = Math.round(frame.delay / 10);
+        const delay = Math.max(1, Math.round(frame.delay / 10));
         buffer.push(delay & 0xFF, (delay >> 8) & 0xFF);
         // 透明颜色索引
         buffer.push(0x00);
@@ -191,50 +258,59 @@ class CSPFriendlyGifEncoder {
     }
 
     /**
-     * 将RGBA数据转换为调色板索引
-     */
-    rgbaToColorIndex(r, g, b) {
-        // 简化的颜色量化
-        const rIndex = Math.floor(r / 32) * 32;
-        const gIndex = Math.floor(g / 32) * 32;
-        const bIndex = Math.floor(b / 64) * 64;
-        
-        // 映射到0-255索引
-        return Math.floor((rIndex / 32) * 36 + (gIndex / 32) * 6 + (bIndex / 64));
-    }
-
-    /**
-     * LZW压缩图像数据 (简化版本)
+     * 简化的LZW压缩（实际上不压缩，直接输出）
      */
     compressImageData(indices) {
-        // 非常简化的LZW压缩
         const compressed = [];
         const codeSize = 8; // 初始代码大小
         
-        // LZW压缩的简化实现
-        compressed.push(codeSize); // 最小代码大小
+        // LZW初始代码大小
+        compressed.push(codeSize);
         
-        // 清除代码
+        // 清除代码和结束代码
         const clearCode = 1 << codeSize;
         const endCode = clearCode + 1;
         
-        // 简化处理：直接输出索引
-        const packedData = [];
-        packedData.push(clearCode & 0xFF, (clearCode >> 8) & 0xFF);
+        // 写入清除代码
+        let bitBuffer = 0;
+        let bitCount = 0;
+        const outputBuffer = [];
         
-        for (let i = 0; i < indices.length; i++) {
-            packedData.push(indices[i]);
+        // 写入一个值到位缓冲区
+        function writeBits(value, bits) {
+            bitBuffer |= (value << bitCount);
+            bitCount += bits;
+            
+            while (bitCount >= 8) {
+                outputBuffer.push(bitBuffer & 0xFF);
+                bitBuffer >>= 8;
+                bitCount -= 8;
+            }
         }
         
-        packedData.push(endCode & 0xFF, (endCode >> 8) & 0xFF);
+        // 写入清除代码
+        writeBits(clearCode, 9);
+        
+        // 直接写入像素索引
+        for (let i = 0; i < indices.length; i++) {
+            writeBits(indices[i], 9);
+        }
+        
+        // 写入结束代码
+        writeBits(endCode, 9);
+        
+        // 输出剩余位
+        if (bitCount > 0) {
+            outputBuffer.push(bitBuffer & 0xFF);
+        }
         
         // 分块输出
         let offset = 0;
-        while (offset < packedData.length) {
-            const chunkSize = Math.min(255, packedData.length - offset);
+        while (offset < outputBuffer.length) {
+            const chunkSize = Math.min(255, outputBuffer.length - offset);
             compressed.push(chunkSize);
             for (let i = 0; i < chunkSize; i++) {
-                compressed.push(packedData[offset + i]);
+                compressed.push(outputBuffer[offset + i]);
             }
             offset += chunkSize;
         }
@@ -265,9 +341,11 @@ class CSPFriendlyGifEncoder {
             const b = frame.data[i + 2];
             // const a = frame.data[i + 3]; // 忽略alpha通道
             
-            const colorIndex = this.rgbaToColorIndex(r, g, b);
-            indices.push(Math.min(255, Math.max(0, colorIndex)));
+            const colorIndex = this.mapColorToPalette(r, g, b);
+            indices.push(colorIndex);
         }
+        
+        console.log(`帧 ${frameIndex + 1} 转换了 ${indices.length} 个像素`);
         
         // 压缩并写入图像数据
         const compressed = this.compressImageData(indices);
