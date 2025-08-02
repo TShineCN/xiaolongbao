@@ -4,18 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>动态图组合成工具</title>
-    <!-- 引入多种CSP友好的GIF编码器 -->
-    <script src="reliableGifEncoder.js"></script>
-    <script src="simpleGifEncoder.js"></script>
-    <script src="modernGifEncoder.js"></script>
-    <script src="cspFriendlyGifEncoder.js"></script>
-    <script src="canvasGifEncoder.js"></script>
-    <script src="wasmGifEncoder.js"></script>
-    <!-- GIF.js在GitHub Pages的CSP环境下无法正常工作，已移除 -->
-    <!-- 引入独立的GIF生成器 -->
-    <script src="gifGenerator.js"></script>
-    <!-- 引入备用GIF生成器 -->
-    <script src="fallbackGifGenerator.js"></script>
+    <!-- 引入gif.js库 -->
+    <script src="gif.js"></script>
     <style>
         * {
             margin: 0;
@@ -680,14 +670,7 @@
             frameInterval: null,
             composedFrames: {},
             playSpeed: 1.0, // 播放速度倍数，1.0 = 200ms/帧
-            reliableEncoder: null, // 可靠编码器实例 (最优先)
-            gifGenerator: null, // GIF生成器实例
-            fallbackGenerator: null, // 备用生成器实例
-            simpleEncoder: null, // 简单编码器实例
-            modernEncoder: null, // 现代编码器实例
-            cspEncoder: null, // CSP友好编码器实例
-            canvasEncoder: null, // Canvas编码器实例
-            wasmEncoder: null // WASM风格编码器实例
+            gif: null // gif.js实例
         };
 
         // 初始化函数
@@ -695,54 +678,13 @@
             // 添加这一行解决跨域问题
             dom.ctx = dom.canvas.getContext('2d', { willReadFrequently: true });
             
-            // 初始化所有GIF编码器
-            console.log('初始化多种GIF编码器...');
+            // 初始化gif.js
+            console.log('初始化gif.js库...');
             
-            // 0. 可靠编码器（最优先）
-            if (typeof ReliableGifEncoder !== 'undefined') {
-                state.reliableEncoder = new ReliableGifEncoder();
-                console.log('✓ 可靠GIF编码器初始化成功');
-            }
-            
-            // 1. 简单编码器（备用）
-            if (typeof SimpleGifEncoder !== 'undefined') {
-                state.simpleEncoder = new SimpleGifEncoder();
-                console.log('✓ 简单GIF编码器初始化成功');
-            }
-            
-            // 2. 现代编码器
-            if (typeof ModernGifEncoder !== 'undefined') {
-                state.modernEncoder = new ModernGifEncoder();
-                console.log('✓ 现代GIF编码器初始化成功');
-            }
-            
-            // 3. CSP友好编码器
-            if (typeof CSPFriendlyGifEncoder !== 'undefined') {
-                state.cspEncoder = new CSPFriendlyGifEncoder();
-                console.log('✓ CSP友好编码器初始化成功');
-            }
-            
-            // 4. Canvas编码器
-            if (typeof CanvasGifEncoder !== 'undefined') {
-                state.canvasEncoder = new CanvasGifEncoder();
-                console.log('✓ Canvas GIF编码器初始化成功');
-            }
-            
-            // 5. WASM风格编码器（最后尝试）
-            if (typeof WasmGifEncoder !== 'undefined') {
-                state.wasmEncoder = new WasmGifEncoder();
-                console.log('✓ WASM风格编码器初始化成功');
-            }
-            
-            // 5. 原有编码器（备用）
-            if (typeof GifGenerator !== 'undefined') {
-                state.gifGenerator = new GifGenerator();
-                console.log('✓ 主GIF生成器初始化成功');
-            }
-            
-            if (typeof FallbackGifGenerator !== 'undefined') {
-                state.fallbackGenerator = new FallbackGifGenerator();
-                console.log('✓ 备用GIF生成器初始化成功');
+            if (typeof GIF !== 'undefined') {
+                console.log('✓ gif.js库加载成功');
+            } else {
+                console.error('✗ gif.js库加载失败');
             }
             
             setupButtons();
@@ -1179,7 +1121,7 @@
             }
         }
         
-        // 使用多重方案保存GIF
+        // 使用gif.js保存GIF
         async function saveAsGif() {
             if (!state.userImage || !state.userImage.complete) {
                 updateProgress('请先上传图片！');
@@ -1208,105 +1150,60 @@
                 
                 console.log(`准备生成GIF: ${frameCanvases.length}帧, 尺寸: ${canvasWidth}x${canvasHeight}`);
                 
-                updateProgress('正在生成GIF文件...', 30);
+                updateProgress('正在使用gif.js生成GIF文件...', 40);
                 
                 const frameDelay = Math.round(200 / state.playSpeed);
-                let blob = null;
                 
-                // 按优先级尝试多种编码器（从最可靠到最复杂）
-                const encoders = [
-                    {
-                        name: '可靠编码器',
-                        instance: state.reliableEncoder,
-                        progress: 10
-                    },
-                    {
-                        name: '简单编码器',
-                        instance: state.simpleEncoder,
-                        progress: 30
-                    },
-                    {
-                        name: '现代编码器',
-                        instance: state.modernEncoder,
-                        progress: 50
-                    },
-                    {
-                        name: 'CSP友好编码器',
-                        instance: state.cspEncoder,
-                        progress: 70
-                    },
-                    {
-                        name: 'Canvas编码器',
-                        instance: state.canvasEncoder,
-                        progress: 90
+                // 创建gif.js实例
+                const gif = new GIF({
+                    workers: 0, // 不使用web workers
+                    quality: 10,
+                    width: canvasWidth,
+                    height: canvasHeight,
+                    repeat: 0, // 无限循环
+                    transparent: null,
+                    background: '#000000'
+                });
+                
+                // 设置进度回调
+                gif.on('progress', function(p) {
+                    const progress = 40 + (p * 50);
+                    updateProgress(`生成GIF中... ${Math.round(progress)}%`, progress);
+                });
+                
+                // 设置完成回调
+                gif.on('finished', function(blob) {
+                    console.log(`gif.js成功生成GIF: ${(blob.size/1024).toFixed(1)}KB`);
+                    
+                    // 成功生成GIF
+                    const fileName = `${anim.name.replace(/\s+/g, '_')}_动画_${state.playSpeed}x速度.gif`;
+                    const success = downloadFile(blob, fileName, 'GIF动画');
+                    
+                    if (success) {
+                        updateProgress('GIF保存成功！', 100);
+                        console.log(`GIF下载成功: ${fileName}, 大小: ${(blob.size / 1024 / 1024).toFixed(2)}MB`);
+                    } else {
+                        updateProgress('下载失败，请重试');
                     }
-                ];
+                    
+                    setTimeout(resetSaveButton, 2000);
+                });
                 
-                for (const encoder of encoders) {
-                    if (!blob && encoder.instance && frameCanvases.length > 0) {
-                        try {
-                            updateProgress(`使用${encoder.name}创建GIF...`, encoder.progress);
-                            
-                            // 设置进度回调
-                            encoder.instance.onProgress = (progress) => {
-                                const totalProgress = encoder.progress + (progress * 15);
-                                updateProgress(`${encoder.name}生成中... ${Math.round(totalProgress)}%`, totalProgress);
-                            };
-                            
-                            // 清空之前的帧
-                            encoder.instance.frames = [];
-                            encoder.instance.width = canvasWidth;
-                            encoder.instance.height = canvasHeight;
-                            encoder.instance.delay = frameDelay;
-                            
-                            // 添加所有帧
-                            for (const canvas of frameCanvases) {
-                                encoder.instance.addFrame(canvas, { delay: frameDelay });
-                            }
-                            
-                            // 生成GIF
-                            if (encoder.name === 'Canvas编码器') {
-                                blob = await encoder.instance.createAnimation();
-                            } else if (encoder.name === '可靠编码器') {
-                                blob = encoder.instance.createBlob();
-                            } else {
-                                blob = encoder.instance.createBlob();
-                            }
-                            
-                            if (blob && blob.size > 0) {
-                                console.log(`${encoder.name}成功生成GIF: ${(blob.size/1024).toFixed(1)}KB`);
-                                break;
-                            } else {
-                                console.warn(`${encoder.name}生成的blob无效`);
-                                blob = null;
-                            }
-                            
-                        } catch (error) {
-                            console.error(`${encoder.name}失败:`, error);
-                            blob = null;
-                        }
-                    }
+                // 设置错误回调
+                gif.on('error', function(error) {
+                    console.error('gif.js生成失败:', error);
+                    updateProgress('GIF生成失败，正在下载图片序列...');
+                    downloadFrameSequence(frameCanvases, anim.name);
+                });
+                
+                // 添加所有帧到gif
+                for (const canvas of frameCanvases) {
+                    gif.addFrame(canvas, { delay: frameDelay });
                 }
                 
-                // 最终方案：下载图片序列
-                if (!blob) {
-                    updateProgress('下载图片序列作为备选...', 95);
-                    await downloadFrameSequence(frameCanvases, anim.name);
-                    return;
-                }
-                
-                // 成功生成GIF
-                const fileName = `${anim.name.replace(/\s+/g, '_')}_动画_${state.playSpeed}x速度.gif`;
-                const success = downloadFile(blob, fileName, 'GIF动画');
-                
-                if (success) {
-                    updateProgress('GIF保存成功！', 100);
-                    console.log(`GIF下载成功: ${fileName}, 大小: ${(blob.size / 1024 / 1024).toFixed(2)}MB`);
-                } else {
-                    updateProgress('下载失败，请重试');
-                }
-                
-                setTimeout(resetSaveButton, 2000);
+                // 开始渲染
+                console.log('开始gif.js渲染...');
+                gif.render();
                 
             } catch (error) {
                 console.error('GIF生成失败:', error);
@@ -1362,76 +1259,6 @@
             return compositeCanvas;
         }
         
-        // 使用CSP友好编码器创建GIF
-        async function createGifWithCSPEncoder(frameCanvases, options) {
-            return new Promise((resolve, reject) => {
-                try {
-                    console.log(`CSP编码器开始处理 ${frameCanvases.length} 帧`);
-                    
-                    const encoder = new CSPFriendlyGifEncoder();
-                    encoder.width = options.width;
-                    encoder.height = options.height;
-                    encoder.delay = options.frameDelay;
-                    
-                    // 设置进度回调
-                    encoder.onProgress = (progress) => {
-                        const totalProgress = 35 + (progress * 30);
-                        updateProgress(`CSP编码中... ${Math.round(totalProgress)}%`, totalProgress);
-                    };
-                    
-                    // 添加所有帧
-                    frameCanvases.forEach((canvas, index) => {
-                        encoder.addFrame(canvas, { delay: options.frameDelay });
-                        console.log(`CSP编码器添加帧 ${index + 1}/${frameCanvases.length}`);
-                    });
-                    
-                    // 创建blob
-                    const blob = encoder.createBlob();
-                    
-                    if (blob && blob.size > 0) {
-                        console.log(`CSP编码器成功: 大小 ${(blob.size/1024).toFixed(1)}KB`);
-                        resolve(blob);
-                    } else {
-                        reject(new Error('CSP编码器生成的blob无效'));
-                    }
-                    
-                } catch (error) {
-                    console.error('CSP编码器错误:', error);
-                    reject(error);
-                }
-            });
-        }
-        
-        // 直接使用gif.js创建GIF
-        async function createGifDirectly(frameCanvases, options) {
-            return new Promise((resolve, reject) => {
-                try {
-                    const gif = new GIF({
-                        workers: 0,
-                        quality: options.quality || 10,
-                        width: options.width || 800,
-                        height: options.height || 800,
-                        repeat: 0,
-                        workerScript: null
-                    });
-
-                    frameCanvases.forEach((canvas) => {
-                        gif.addFrame(canvas, { delay: options.frameDelay || 200 });
-                    });
-
-                    gif.on('finished', resolve);
-                    gif.on('error', reject);
-
-                    setTimeout(() => {
-                        reject(new Error('直接gif.js超时'));
-                    }, 10000);
-
-                    gif.render();
-                } catch (error) {
-                    reject(error);
-                }
-            });
-        }
         
         // 下载帧序列
         async function downloadFrameSequence(frameCanvases, animName) {
