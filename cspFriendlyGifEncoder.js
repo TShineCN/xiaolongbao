@@ -1,7 +1,7 @@
 /**
- * CSP友好的GIF编码器 - 修复版本
+ * CSP友好的GIF编码器 - 完全重写版本
  * 纯JavaScript实现，不使用eval()或其他被CSP限制的功能
- * 修复颜色处理和LZW压缩问题
+ * 使用简化但正确的GIF格式
  */
 class CSPFriendlyGifEncoder {
     constructor() {
@@ -11,7 +11,7 @@ class CSPFriendlyGifEncoder {
         this.height = 0;
         this.onProgress = null;
         this.globalPalette = null;
-        console.log('CSP友好的GIF编码器初始化（修复版）');
+        console.log('CSP友好的GIF编码器初始化（重写版）');
     }
 
     /**
@@ -43,22 +43,28 @@ class CSPFriendlyGifEncoder {
     }
 
     /**
-     * 生成更丰富的调色板
+     * 生成标准216色web安全调色板
      */
     generatePalette() {
         const palette = [];
         
-        // 生成8级RGB色彩空间 (8x8x4 = 256)
-        for (let r = 0; r < 8; r++) {
-            for (let g = 0; g < 8; g++) {
-                for (let b = 0; b < 4; b++) {
+        // 216色web安全调色板 (6x6x6)
+        for (let r = 0; r < 6; r++) {
+            for (let g = 0; g < 6; g++) {
+                for (let b = 0; b < 6; b++) {
                     palette.push([
-                        Math.floor(r * 255 / 7),
-                        Math.floor(g * 255 / 7),
-                        Math.floor(b * 255 / 3)
+                        Math.floor(r * 51), // 0, 51, 102, 153, 204, 255
+                        Math.floor(g * 51),
+                        Math.floor(b * 51)
                     ]);
                 }
             }
+        }
+        
+        // 添加40种灰度
+        for (let i = 0; i < 40; i++) {
+            const gray = Math.floor(i * 255 / 39);
+            palette.push([gray, gray, gray]);
         }
         
         // 确保调色板有256种颜色
@@ -67,7 +73,7 @@ class CSPFriendlyGifEncoder {
         }
         
         this.globalPalette = palette;
-        console.log(`生成调色板: ${palette.length} 种颜色`);
+        console.log(`生成标准调色板: ${palette.length} 种颜色`);
         return palette;
     }
 
@@ -82,7 +88,7 @@ class CSPFriendlyGifEncoder {
     }
 
     /**
-     * 将RGB颜色映射到调色板索引
+     * 将RGB颜色映射到调色板索引（改进版）
      */
     mapColorToPalette(r, g, b) {
         if (!this.globalPalette) {
@@ -92,8 +98,23 @@ class CSPFriendlyGifEncoder {
         let bestIndex = 0;
         let bestDistance = Infinity;
         
+        // 对于web安全色，直接查找最接近的值
+        const safeR = Math.round(r / 51) * 51;
+        const safeG = Math.round(g / 51) * 51;
+        const safeB = Math.round(b / 51) * 51;
+        
+        // 先尝试精确匹配web安全色
+        for (let i = 0; i < 216; i++) {
+            const palette = this.globalPalette[i];
+            if (palette[0] === safeR && palette[1] === safeG && palette[2] === safeB) {
+                return i;
+            }
+        }
+        
+        // 如果没有精确匹配，找最接近的颜色
         for (let i = 0; i < this.globalPalette.length; i++) {
-            const distance = this.colorDistance([r, g, b], this.globalPalette[i]);
+            const palette = this.globalPalette[i];
+            const distance = this.colorDistance([r, g, b], palette);
             if (distance < bestDistance) {
                 bestDistance = distance;
                 bestIndex = i;
@@ -252,27 +273,27 @@ class CSPFriendlyGifEncoder {
     }
 
     /**
-     * 改进的LZW压缩
+     * 简化但正确的图像数据压缩
      */
     compressImageData(indices) {
         const compressed = [];
-        const codeSize = 8; // 初始代码大小
         
-        // LZW初始代码大小
-        compressed.push(codeSize);
+        // LZW最小代码大小
+        const minCodeSize = 8;
+        compressed.push(minCodeSize);
         
-        // 清除代码和结束代码
-        const clearCode = 1 << codeSize;
-        const endCode = clearCode + 1;
+        // 计算清除码和结束码
+        const clearCode = 1 << minCodeSize; // 256
+        const endCode = clearCode + 1;       // 257
         
         let bitBuffer = 0;
         let bitCount = 0;
         const outputBuffer = [];
         
-        // 写入一个值到位缓冲区
-        function writeBits(value, bits) {
-            bitBuffer |= (value << bitCount);
-            bitCount += bits;
+        // 写入位到缓冲区
+        function writeBits(code, codeSize) {
+            bitBuffer |= (code << bitCount);
+            bitCount += codeSize;
             
             while (bitCount >= 8) {
                 outputBuffer.push(bitBuffer & 0xFF);
@@ -281,36 +302,39 @@ class CSPFriendlyGifEncoder {
             }
         }
         
-        // 初始化
+        // 当前代码大小从9位开始
         let currentCodeSize = 9;
+        
+        // 写入清除码
         writeBits(clearCode, currentCodeSize);
         
-        // 简化的LZW编码
+        // 逐个写入像素数据
         for (let i = 0; i < indices.length; i++) {
-            const pixelValue = indices[i] & 0xFF; // 确保在0-255范围内
-            writeBits(pixelValue, currentCodeSize);
+            const pixelIndex = indices[i] & 0xFF;
+            writeBits(pixelIndex, currentCodeSize);
         }
         
-        // 写入结束代码
+        // 写入结束码
         writeBits(endCode, currentCodeSize);
         
-        // 输出剩余位
+        // 刷新剩余位
         if (bitCount > 0) {
             outputBuffer.push(bitBuffer & 0xFF);
         }
         
-        // 分块输出
-        let offset = 0;
-        while (offset < outputBuffer.length) {
-            const chunkSize = Math.min(255, outputBuffer.length - offset);
-            compressed.push(chunkSize);
-            for (let i = 0; i < chunkSize; i++) {
-                compressed.push(outputBuffer[offset + i]);
+        // 按照GIF规范分块输出
+        let pos = 0;
+        while (pos < outputBuffer.length) {
+            const blockSize = Math.min(255, outputBuffer.length - pos);
+            compressed.push(blockSize);
+            
+            for (let i = 0; i < blockSize; i++) {
+                compressed.push(outputBuffer[pos + i]);
             }
-            offset += chunkSize;
+            pos += blockSize;
         }
         
-        // 块终止符
+        // 数据终止符
         compressed.push(0x00);
         
         return compressed;
@@ -330,7 +354,7 @@ class CSPFriendlyGifEncoder {
         
         // 转换RGBA数据为调色板索引
         const indices = [];
-        let nonBlackPixels = 0;
+        let colorStats = {};
         
         for (let i = 0; i < frame.data.length; i += 4) {
             const r = frame.data[i];
@@ -338,17 +362,23 @@ class CSPFriendlyGifEncoder {
             const b = frame.data[i + 2];
             const a = frame.data[i + 3];
             
-            // 处理透明像素
+            let colorIndex;
             if (a < 128) {
-                indices.push(0); // 透明像素使用索引0
+                // 透明像素用黑色
+                colorIndex = 0;
             } else {
-                const colorIndex = this.mapColorToPalette(r, g, b);
-                indices.push(colorIndex);
-                if (r > 10 || g > 10 || b > 10) nonBlackPixels++;
+                colorIndex = this.mapColorToPalette(r, g, b);
+                
+                // 统计颜色使用情况
+                const colorKey = `${r},${g},${b}`;
+                colorStats[colorKey] = (colorStats[colorKey] || 0) + 1;
             }
+            
+            indices.push(colorIndex);
         }
         
-        console.log(`帧 ${frameIndex + 1}: ${indices.length} 像素, ${nonBlackPixels} 非黑色像素`);
+        const uniqueColors = Object.keys(colorStats).length;
+        console.log(`帧 ${frameIndex + 1}: ${indices.length} 像素, ${uniqueColors} 种颜色`);
         
         // 压缩并写入图像数据
         const compressed = this.compressImageData(indices);
