@@ -512,11 +512,23 @@
                 
                 <div class="speed-display" id="qualityDisplay" style="margin-top: 15px;">最高品质 (无噪点)</div>
                 <input type="range" class="speed-slider" id="qualitySlider" 
-                       min="1" max="30" step="1" value="30">
+                       min="1" max="30" step="1" value="1">
                 <div class="speed-info">
                     <span>最低品质</span>
                     <span>最高品质</span>
                 </div>
+                
+                <div class="speed-display" style="margin-top: 15px;">抖动算法: <span id="ditherDisplay">Atkinson-serpentine</span></div>
+                <select class="speed-slider" id="ditherSelect" style="width: 100%; padding: 8px; border-radius: 4px; background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.3);">
+                    <option value="false">无抖动 (可能有色带)</option>
+                    <option value="FloydSteinberg">Floyd-Steinberg</option>
+                    <option value="FloydSteinberg-serpentine">Floyd-Steinberg 蛇形</option>
+                    <option value="Atkinson" selected>Atkinson (推荐)</option>
+                    <option value="Atkinson-serpentine">Atkinson 蛇形 (默认)</option>
+                    <option value="Stucki">Stucki</option>
+                    <option value="Stucki-serpentine">Stucki 蛇形</option>
+                    <option value="FalseFloydSteinberg">False Floyd-Steinberg</option>
+                </select>
             </div>
             
             <div class="action-buttons" style="margin-top: 5px;">
@@ -727,7 +739,8 @@
             frameInterval: null,
             composedFrames: {},
             playSpeed: 1.0, // 播放速度倍数，1.0 = 200ms/帧
-            gifQuality: 30, // GIF品质 (1-30, 数字越小品质越高)
+            gifQuality: 1, // GIF品质 (1-30, 数字越小品质越高)
+            ditherMethod: 'Atkinson-serpentine', // 抖动算法
             gif: null // gif.js实例
         };
 
@@ -749,6 +762,7 @@
             setupEventListeners();
             setupSpeedControl();
             setupQualityControl();
+            setupDitherControl();
             preloadFrameImages();
             renderFrame(0);
             // 自动开始播放动画
@@ -906,9 +920,7 @@
             const qualityDisplay = document.getElementById('qualityDisplay');
             
             qualitySlider.addEventListener('input', (e) => {
-                const sliderValue = parseInt(e.target.value);
-                // 反转值：滑条从左到右（1-30），实际品质从低到高（30-1）
-                const quality = 31 - sliderValue;
+                const quality = parseInt(e.target.value);
                 state.gifQuality = quality;
                 
                 // 更新显示
@@ -923,16 +935,34 @@
                     qualityText = '低品质';
                 }
                 
-                qualityDisplay.textContent = `${qualityText} (${quality})`;
+                qualityDisplay.textContent = `${qualityText} (品质值: ${quality})`;
                 
                 console.log(`GIF品质调整为: ${quality}, 描述: ${qualityText}`);
             });
             
             // 初始化显示
-            const initialSliderValue = parseInt(qualitySlider.value);
-            const initialQuality = 31 - initialSliderValue;
+            const initialQuality = parseInt(qualitySlider.value);
             state.gifQuality = initialQuality;
-            qualityDisplay.textContent = '最高品质 (' + initialQuality + ')';
+            qualityDisplay.textContent = '最高品质 (品质值: ' + initialQuality + ')';
+        }
+        
+        // 设置抖动算法控制
+        function setupDitherControl() {
+            const ditherSelect = document.getElementById('ditherSelect');
+            const ditherDisplay = document.getElementById('ditherDisplay');
+            
+            ditherSelect.addEventListener('change', (e) => {
+                const method = e.target.value;
+                state.ditherMethod = method === 'false' ? false : method;
+                
+                ditherDisplay.textContent = method === 'false' ? '无抖动' : method;
+                
+                console.log(`抖动算法调整为: ${method}`);
+            });
+            
+            // 初始化显示
+            state.ditherMethod = ditherSelect.value;
+            ditherDisplay.textContent = ditherSelect.value;
         }
 
         // 设置事件监听器
@@ -1252,22 +1282,22 @@
                 
                 const frameDelay = Math.round(200 / state.playSpeed);
                 
-                // 根据品质调整gif.js参数
-                const optimizedQuality = state.gifQuality === 1 ? 1 : Math.max(1, Math.min(10, state.gifQuality));
-                console.log(`使用优化品质: ${optimizedQuality}`);
+                // 根据官方文档优化gif.js配置 - 解决噪点问题
+                console.log(`GIF配置: 品质=${state.gifQuality}, 抖动算法=${state.ditherMethod}`);
                 
-                // 创建gif.js实例 - 优化配置减少噪点
+                // 创建gif.js实例 - 基于官方文档和用户选择的配置
                 const gif = new GIF({
-                    workers: 2, // 使用2个workers提高性能
-                    quality: optimizedQuality, // 使用优化的品质值
+                    workers: 2,
+                    quality: state.gifQuality, // 直接使用用户设置的品质值（1最高，30最低）
                     width: canvasWidth,
                     height: canvasHeight,
-                    repeat: 0, // 无限循环
+                    repeat: 0,
                     transparent: null,
                     background: '#000000',
-                    dither: false, // 关闭抖动算法，这是关键！
-                    globalPalette: false, // 使用局部调色板，每帧独立
-                    debug: false // 关闭调试信息
+                    // 使用用户选择的抖动算法
+                    dither: state.ditherMethod,
+                    globalPalette: true, // 使用全局调色板保持一致性
+                    debug: false
                 });
                 
                 // 设置进度回调
