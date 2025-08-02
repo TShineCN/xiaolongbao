@@ -514,20 +514,20 @@
                 <input type="range" class="speed-slider" id="qualitySlider" 
                        min="1" max="30" step="1" value="1">
                 <div class="speed-info">
-                    <span>最低品质</span>
                     <span>最高品质</span>
+                    <span>最低品质</span>
                 </div>
                 
-                <div class="speed-display" style="margin-top: 15px;">抖动算法: <span id="ditherDisplay">Atkinson-serpentine</span></div>
+                <div class="speed-display" style="margin-top: 15px;">抖动算法: <span id="ditherDisplay">Atkinson</span></div>
                 <select class="speed-slider" id="ditherSelect" style="width: 100%; padding: 8px; border-radius: 4px; background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.3);">
                     <option value="false">无抖动 (可能有色带)</option>
                     <option value="FloydSteinberg">Floyd-Steinberg</option>
                     <option value="FloydSteinberg-serpentine">Floyd-Steinberg 蛇形</option>
-                    <option value="Atkinson" selected>Atkinson (推荐)</option>
-                    <option value="Atkinson-serpentine">Atkinson 蛇形 (默认)</option>
+                    <option value="Atkinson" selected>Atkinson (最佳噪点控制)</option>
+                    <option value="Atkinson-serpentine">Atkinson 蛇形</option>
                     <option value="Stucki">Stucki</option>
                     <option value="Stucki-serpentine">Stucki 蛇形</option>
-                    <option value="FalseFloydSteinberg">False Floyd-Steinberg</option>
+                    <option value="FalseFloydSteinberg">False Floyd-Steinberg (快速)</option>
                 </select>
             </div>
             
@@ -740,7 +740,7 @@
             composedFrames: {},
             playSpeed: 1.0, // 播放速度倍数，1.0 = 200ms/帧
             gifQuality: 1, // GIF品质 (1-30, 数字越小品质越高)
-            ditherMethod: 'Atkinson-serpentine', // 抖动算法
+            ditherMethod: 'Atkinson', // 抖动算法 - 减少噪点的最佳选择
             gif: null // gif.js实例
         };
 
@@ -1286,7 +1286,7 @@
                 const optimalConfig = getOptimalGifConfig(frameCanvases, canvasWidth, canvasHeight);
                 console.log(`智能GIF配置:`, optimalConfig);
                 
-                // 创建gif.js实例 - 基于petpet-js的最佳实践
+                // 创建gif.js实例 - 优化减少失真和噪点
                 const gif = new GIF({
                     workers: Math.min(navigator.hardwareConcurrency || 2, 4), // 智能worker数量
                     quality: optimalConfig.quality,
@@ -1297,7 +1297,12 @@
                     background: '#000000',
                     dither: optimalConfig.dither,
                     globalPalette: optimalConfig.globalPalette,
-                    debug: false
+                    debug: false,
+                    // 新增的质量优化参数
+                    workerScript: './gif.js/gif.worker.js',
+                    optimizeCb: true,
+                    // 颜色采样优化
+                    sample: 10
                 });
                 
                 // 设置进度回调
@@ -1369,10 +1374,18 @@
             ctx.fillRect(0, 0, canvasWidth, canvasHeight);
             ctx.restore();
             
-            // petpet-js风格：优化渲染质量设置
+            // 优化渲染质量设置 - 减少失真和噪点
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
             ctx.textRenderingOptimization = 'optimizeQuality';
+            
+            // 启用高质量渲染
+            if (ctx.webkitImageSmoothingEnabled !== undefined) {
+                ctx.webkitImageSmoothingEnabled = true;
+            }
+            if (ctx.mozImageSmoothingEnabled !== undefined) {
+                ctx.mozImageSmoothingEnabled = true;
+            }
             
             // 绘制背景图片 - 确保像素完美对齐
             if (anim.frameImages[frameIndex] && anim.frameImages[frameIndex].complete) {
@@ -1455,24 +1468,26 @@
                 globalPalette: true
             };
             
-            // petpet-js风格：内容自适应优化
+            // 内容自适应优化 - 针对噪点和失真进行优化
             if (colorComplexity.type === 'simple') {
-                // 简单图形：禁用抖动，使用局部调色板
+                // 简单图形：禁用抖动减少噪点，使用局部调色板
                 config.dither = false;
                 config.globalPalette = false;
-                config.quality = Math.min(state.gifQuality, 5); // 提高质量
+                config.quality = Math.min(state.gifQuality, 3); // 提高质量
             } else if (colorComplexity.type === 'gradient') {
-                // 渐变图形：使用Floyd-Steinberg抖动
-                config.dither = 'FloydSteinberg-serpentine';
+                // 渐变图形：使用Atkinson抖动减少噪点
+                config.dither = 'Atkinson';
                 config.globalPalette = true;
+                config.quality = Math.min(state.gifQuality, 5);
             } else if (colorComplexity.type === 'photo') {
-                // 照片类：使用Atkinson抖动减少噪点
-                config.dither = 'Atkinson-serpentine';
+                // 照片类：使用最少噪点的抖动算法
+                config.dither = 'Atkinson';
                 config.globalPalette = true;
+                config.quality = Math.min(state.gifQuality, 2); // 更高质量
             }
             
             // 如果用户手动选择了抖动方法，优先使用用户选择
-            if (state.ditherMethod !== 'Atkinson-serpentine') {
+            if (state.ditherMethod !== 'Atkinson') {
                 config.dither = state.ditherMethod;
             }
             
