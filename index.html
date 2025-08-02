@@ -1092,8 +1092,10 @@
                 ctx.restore();
                 
                 // 更新位置信息
-                dom.framePositionInfo.textContent = 
-                    `当前帧位置: (${pos.x}, ${pos.y}) 旋转: ${pos.rotation}°`;
+                if (dom.framePositionInfo) {
+                    dom.framePositionInfo.textContent = 
+                        `当前帧位置: (${pos.x}, ${pos.y}) 旋转: ${pos.rotation}°`;
+                }
             } else {
                 console.log('用户图片未准备好:', !!state.userImage, !!state.processedUserImage);
             }
@@ -1224,6 +1226,7 @@
             
             updateProgress('正在生成GIF...', 0);
             dom.saveBtn.disabled = true;
+            dom.testBtn.disabled = true; // 也禁用测试按钮
             dom.progressContainer.style.display = 'block';
             
             try {
@@ -1239,7 +1242,8 @@
                     const frameCanvas = await createCompositeFrame(i, canvasWidth, canvasHeight);
                     frameCanvases.push(frameCanvas);
                     
-                    await new Promise(resolve => setTimeout(resolve, 10));
+                    // 增加帧间处理延迟，避免阻塞UI
+                    await new Promise(resolve => setTimeout(resolve, 50));
                 }
                 
                 console.log(`准备生成GIF: ${frameCanvases.length}帧, 尺寸: ${canvasWidth}x${canvasHeight}`);
@@ -1250,13 +1254,16 @@
                 
                 // 创建gif.js实例
                 const gif = new GIF({
-                    workers: 0, // 不使用web workers
+                    workers: 2, // 使用2个workers提高性能
                     quality: state.gifQuality, // 用户选择的品质 (1-30, 数字越小品质越高)
                     width: canvasWidth,
                     height: canvasHeight,
                     repeat: 0, // 无限循环
                     transparent: null,
-                    background: '#000000'
+                    background: '#000000',
+                    dither: 'FloydSteinberg', // 使用Floyd-Steinberg抖动算法减少色带
+                    globalPalette: true, // 使用全局调色板提高一致性
+                    debug: false // 关闭调试信息
                 });
                 
                 // 设置进度回调
@@ -1292,7 +1299,11 @@
                 
                 // 添加所有帧到gif
                 for (const canvas of frameCanvases) {
-                    gif.addFrame(canvas, { delay: frameDelay });
+                    gif.addFrame(canvas, { 
+                        delay: frameDelay,
+                        copy: true, // 复制像素数据，避免引用问题
+                        dispose: 2 // 恢复到背景色，减少闪烁
+                    });
                 }
                 
                 // 开始渲染
@@ -1375,6 +1386,7 @@
         // 重置保存按钮状态
         function resetSaveButton() {
             dom.saveBtn.disabled = false;
+            dom.testBtn.disabled = false; // 重新启用测试按钮
             dom.progressContainer.style.display = 'none';
             dom.progressBar.style.width = '0%';
         }
