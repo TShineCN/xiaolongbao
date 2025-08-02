@@ -538,6 +538,10 @@
                 <button class="action-btn save-btn" id="saveBtn">保存高质量GIF</button>
             </div>
             
+            <div class="action-buttons" style="margin-top: 10px;">
+                <button class="action-btn" id="testGifshotBtn" style="background: linear-gradient(to right, #667eea, #764ba2); font-size: 12px; padding: 10px;">测试gifshot库</button>
+            </div>
+            
             <div class="status-text" id="statusText">准备好创建您的动画！</div>
             <!-- 新增进度条 -->
             <div class="progress-container" id="progressContainer">
@@ -743,7 +747,8 @@
             playSpeed: 1.0, // 播放速度倍数，1.0 = 200ms/帧
             gifQuality: 1, // GIF品质 (1-30, 数字越小品质越高)
             ditherMethod: 'Atkinson', // 抖动算法 - 减少噪点的最佳选择
-            gif: null // gif.js实例
+            gif: null, // gif.js实例
+            forceGifshot: true // 强制使用gifshot库
         };
 
         // 初始化函数
@@ -751,20 +756,33 @@
             // 添加这一行解决跨域问题
             dom.ctx = dom.canvas.getContext('2d', { willReadFrequently: true });
             
-            // 初始化库检测
-            console.log('初始化GIF库...');
+            // 初始化库检测和状态输出
+            console.log('=== 初始化GIF库检测 ===');
+            console.log('强制使用gifshot模式:', state.forceGifshot);
             
-            if (typeof gifshot !== 'undefined') {
+            // 详细检测gifshot库
+            console.log('gifshot检测:');
+            console.log('  - typeof gifshot:', typeof gifshot);
+            console.log('  - gifshot对象:', gifshot);
+            console.log('  - gifshot.createGIF存在:', !!(gifshot && gifshot.createGIF));
+            
+            if (typeof gifshot !== 'undefined' && gifshot && gifshot.createGIF) {
                 console.log('✓ gifshot库加载成功 (优先使用高质量导出)');
+                console.log('  版本:', gifshot.VERSION || '未知');
             } else {
-                console.warn('✗ gifshot库加载失败，将使用gif.js备选方案');
+                console.warn('✗ gifshot库状态异常，稍后将尝试动态加载');
             }
             
+            // 检测gif.js库
+            console.log('gif.js检测:');
+            console.log('  - typeof GIF:', typeof GIF);
             if (typeof GIF !== 'undefined') {
                 console.log('✓ gif.js库加载成功 (备选方案)');
             } else {
                 console.error('✗ gif.js库加载失败');
             }
+            
+            console.log('=== 库检测完成 ===');
             
             setupButtons();
             setupEventListeners();
@@ -986,6 +1004,9 @@
             
             // 保存按钮事件
             dom.saveBtn.addEventListener('click', saveAsGif);
+            
+            // 测试gifshot库按钮事件
+            document.getElementById('testGifshotBtn').addEventListener('click', testGifshotLibrary);
             
             // 允许拖放上传
             dom.uploadArea.addEventListener('dragover', (e) => {
@@ -1285,12 +1306,48 @@
                 
                 console.log(`准备生成GIF: ${frameCanvases.length}帧, 尺寸: ${canvasWidth}x${canvasHeight}`);
                 
-                // 优先使用gifshot库（最高质量）
-                if (typeof gifshot !== 'undefined') {
-                    await saveWithGifshot(frameCanvases, anim, canvasWidth, canvasHeight);
+                // 强制使用gifshot库进行高质量导出
+                console.log('强制使用gifshot模式:', state.forceGifshot);
+                console.log('检查gifshot库状态:', typeof gifshot, gifshot);
+                
+                if (state.forceGifshot) {
+                    // 强制模式：必须使用gifshot
+                    if (typeof gifshot !== 'undefined' && gifshot && gifshot.createGIF) {
+                        console.log('✓ 使用gifshot库进行高质量导出');
+                        await saveWithGifshot(frameCanvases, anim, canvasWidth, canvasHeight);
+                    } else {
+                        console.error('✗ gifshot库不可用，尝试重新加载...');
+                        updateProgress('gifshot库未就绪，正在重新加载...', 25);
+                        
+                        // 强制重新加载gifshot库
+                        const gifshotLoaded = await loadGifshotLibrary();
+                        if (gifshotLoaded) {
+                            console.log('✓ 重新加载gifshot成功，开始高质量导出');
+                            await saveWithGifshot(frameCanvases, anim, canvasWidth, canvasHeight);
+                        } else {
+                            // 即使在强制模式下，如果无法加载gifshot，也要给用户一个选择
+                            updateProgress('无法加载gifshot库，是否继续使用gif.js？', 30);
+                            const useGifJS = confirm('无法加载gifshot高质量库，是否使用gif.js继续导出？');
+                            if (useGifJS) {
+                                console.warn('用户选择使用gif.js继续导出');
+                                await saveWithGifJS(frameCanvases, anim, canvasWidth, canvasHeight);
+                            } else {
+                                updateProgress('导出已取消');
+                                resetSaveButton();
+                                return;
+                            }
+                        }
+                    }
                 } else {
-                    console.warn('gifshot库未加载，使用gif.js作为备选方案');
-                    await saveWithGifJS(frameCanvases, anim, canvasWidth, canvasHeight);
+                    // 非强制模式：优先gifshot，失败则降级
+                    if (typeof gifshot !== 'undefined' && gifshot && gifshot.createGIF) {
+                        console.log('✓ 使用gifshot库进行高质量导出');
+                        await saveWithGifshot(frameCanvases, anim, canvasWidth, canvasHeight);
+                    } else {
+                        console.warn('✗ 无法使用gifshot，降级到gif.js');
+                        updateProgress('降级到gif.js导出...', 30);
+                        await saveWithGifJS(frameCanvases, anim, canvasWidth, canvasHeight);
+                    }
                 }
                 
             } catch (error) {
@@ -1450,6 +1507,127 @@
             // 开始渲染
             console.log('开始gif.js渲染...');
             gif.render();
+        }
+        
+        // 测试gifshot库功能
+        async function testGifshotLibrary() {
+            console.log('=== 测试gifshot库功能 ===');
+            updateProgress('正在测试gifshot库...', 0);
+            
+            try {
+                // 第一步：检查库是否存在
+                console.log('1. 检查gifshot库状态:');
+                console.log('   typeof gifshot:', typeof gifshot);
+                console.log('   gifshot:', gifshot);
+                console.log('   gifshot.createGIF存在:', !!(gifshot && gifshot.createGIF));
+                
+                if (typeof gifshot === 'undefined' || !gifshot || !gifshot.createGIF) {
+                    console.log('2. gifshot库不可用，尝试动态加载...');
+                    updateProgress('gifshot库不可用，尝试重新加载...', 25);
+                    
+                    const loaded = await loadGifshotLibrary();
+                    if (!loaded) {
+                        updateProgress('❌ gifshot库加载失败');
+                        return;
+                    }
+                }
+                
+                console.log('3. 测试创建简单GIF...');
+                updateProgress('测试创建简单GIF...', 50);
+                
+                // 创建一个简单的测试图片
+                const testCanvas = document.createElement('canvas');
+                testCanvas.width = 100;
+                testCanvas.height = 100;
+                const ctx = testCanvas.getContext('2d');
+                
+                // 绘制测试图片
+                ctx.fillStyle = '#ff0000';
+                ctx.fillRect(0, 0, 100, 100);
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '20px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('TEST', 50, 55);
+                
+                const testImage = testCanvas.toDataURL();
+                
+                // 使用gifshot创建测试GIF
+                gifshot.createGIF({
+                    images: [testImage, testImage],
+                    gifWidth: 100,
+                    gifHeight: 100,
+                    interval: 0.5,
+                    numFrames: 2,
+                    quality: 'high',
+                    sampleInterval: 1,
+                    numWorkers: 1
+                }, function(obj) {
+                    if (!obj.error) {
+                        console.log('✓ gifshot库测试成功！');
+                        console.log('   生成的GIF大小:', obj.image.length, '字符');
+                        updateProgress('✅ gifshot库测试成功！可以正常使用', 100);
+                        
+                        // 下载测试GIF
+                        const testBlob = dataURLToBlob(obj.image);
+                        downloadFile(testBlob, 'gifshot_test.gif', 'GIF测试文件');
+                        
+                        setTimeout(() => {
+                            updateProgress('gifshot库测试完成，可以正常导出高质量GIF');
+                        }, 2000);
+                    } else {
+                        console.error('✗ gifshot库测试失败:', obj.error);
+                        updateProgress('❌ gifshot库测试失败: ' + obj.error);
+                    }
+                });
+                
+            } catch (error) {
+                console.error('测试gifshot库时发生错误:', error);
+                updateProgress('❌ 测试失败: ' + error.message);
+            }
+        }
+        
+        // 动态加载gifshot库
+        function loadGifshotLibrary() {
+            return new Promise((resolve) => {
+                // 如果已经加载，直接返回
+                if (typeof gifshot !== 'undefined' && gifshot && gifshot.createGIF) {
+                    resolve(true);
+                    return;
+                }
+                
+                console.log('尝试动态加载gifshot库...');
+                
+                // 创建script标签动态加载
+                const script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/gifshot@0.4.5/dist/gifshot.min.js';
+                script.crossOrigin = 'anonymous';
+                
+                script.onload = () => {
+                    console.log('gifshot库动态加载成功');
+                    // 等待一小段时间确保库完全初始化
+                    setTimeout(() => {
+                        if (typeof gifshot !== 'undefined' && gifshot && gifshot.createGIF) {
+                            resolve(true);
+                        } else {
+                            console.error('gifshot库加载后仍不可用');
+                            resolve(false);
+                        }
+                    }, 100);
+                };
+                
+                script.onerror = () => {
+                    console.error('gifshot库动态加载失败');
+                    resolve(false);
+                };
+                
+                document.head.appendChild(script);
+                
+                // 设置超时
+                setTimeout(() => {
+                    console.error('gifshot库加载超时');
+                    resolve(false);
+                }, 5000);
+            });
         }
         
         // 将DataURL转换为Blob
