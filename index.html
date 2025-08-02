@@ -1252,17 +1252,21 @@
                 
                 const frameDelay = Math.round(200 / state.playSpeed);
                 
-                // 创建gif.js实例
+                // 根据品质调整gif.js参数
+                const optimizedQuality = state.gifQuality === 1 ? 1 : Math.max(1, Math.min(10, state.gifQuality));
+                console.log(`使用优化品质: ${optimizedQuality}`);
+                
+                // 创建gif.js实例 - 优化配置减少噪点
                 const gif = new GIF({
                     workers: 2, // 使用2个workers提高性能
-                    quality: state.gifQuality, // 用户选择的品质 (1-30, 数字越小品质越高)
+                    quality: optimizedQuality, // 使用优化的品质值
                     width: canvasWidth,
                     height: canvasHeight,
                     repeat: 0, // 无限循环
                     transparent: null,
                     background: '#000000',
-                    dither: 'FloydSteinberg', // 使用Floyd-Steinberg抖动算法减少色带
-                    globalPalette: true, // 使用全局调色板提高一致性
+                    dither: false, // 关闭抖动算法，这是关键！
+                    globalPalette: false, // 使用局部调色板，每帧独立
                     debug: false // 关闭调试信息
                 });
                 
@@ -1297,13 +1301,31 @@
                     downloadFrameSequence(frameCanvases, anim.name);
                 });
                 
-                // 添加所有帧到gif
-                for (const canvas of frameCanvases) {
-                    gif.addFrame(canvas, { 
+                // 添加所有帧到gif - 确保每帧独立
+                for (let i = 0; i < frameCanvases.length; i++) {
+                    const canvas = frameCanvases[i];
+                    
+                    // 创建独立的canvas副本，避免引用问题
+                    const independentCanvas = document.createElement('canvas');
+                    independentCanvas.width = canvas.width;
+                    independentCanvas.height = canvas.height;
+                    const ctx = independentCanvas.getContext('2d');
+                    
+                    // 确保完全清除画布
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    ctx.fillStyle = '#000000';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    
+                    // 复制原始画布内容
+                    ctx.drawImage(canvas, 0, 0);
+                    
+                    gif.addFrame(independentCanvas, { 
                         delay: frameDelay,
-                        copy: true, // 复制像素数据，避免引用问题
-                        dispose: 2 // 恢复到背景色，减少闪烁
+                        copy: true, // 复制像素数据
+                        dispose: 2 // 恢复到背景色
                     });
+                    
+                    console.log(`添加帧 ${i + 1}/${frameCanvases.length}`);
                 }
                 
                 // 开始渲染
@@ -1317,7 +1339,7 @@
             }
         }
         
-        // 创建合成帧 - 与预览完全一致
+        // 创建合成帧 - 优化减少噪点
         async function createCompositeFrame(frameIndex, canvasWidth, canvasHeight) {
             const anim = config.animations[state.currentAnimation];
             
@@ -1325,21 +1347,29 @@
             const compositeCanvas = document.createElement('canvas');
             compositeCanvas.width = canvasWidth;
             compositeCanvas.height = canvasHeight;
-            const ctx = compositeCanvas.getContext('2d');
+            const ctx = compositeCanvas.getContext('2d', { 
+                alpha: false, // 禁用透明度，减少噪点
+                willReadFrequently: false 
+            });
+            
+            // 强制清除并设置黑色背景
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+            
+            // 设置高质量渲染
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
             
             // 绘制背景图片 - 与预览逻辑完全一致
             if (anim.frameImages[frameIndex] && anim.frameImages[frameIndex].complete) {
                 const bgImg = anim.frameImages[frameIndex];
-                // 将背景图片缩放到canvas尺寸
+                
+                // 确保图片完全覆盖画布
                 ctx.drawImage(bgImg, 0, 0, canvasWidth, canvasHeight);
-            } else {
-                // 如果背景图片未加载，使用黑色背景
-                ctx.fillStyle = '#000';
-                ctx.fillRect(0, 0, canvasWidth, canvasHeight);
             }
             
             // 绘制用户图片 - 与预览逻辑完全一致
-            if (state.processedUserImage) {
+            if (state.processedUserImage && state.processedUserImage.complete) {
                 const pos = anim.overlayPositions[frameIndex];
                 
                 console.log(`导出帧${frameIndex}: 用户图片位置(${pos.x}, ${pos.y}), 画布尺寸${canvasWidth}x${canvasHeight}`);
@@ -1351,6 +1381,7 @@
                 const imgWidth = state.processedUserImage.width * pos.scale;
                 const imgHeight = state.processedUserImage.height * pos.scale;
                 
+                // 使用高质量绘制
                 ctx.drawImage(
                     state.processedUserImage,
                     -imgWidth/2,
