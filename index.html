@@ -5,8 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>动态图组合成工具</title>
     <!-- 引入多种CSP友好的GIF编码器 -->
-    <script src="cspFriendlyGifEncoder.js"></script>
+    <script src="simpleGifEncoder.js"></script>
     <script src="modernGifEncoder.js"></script>
+    <script src="cspFriendlyGifEncoder.js"></script>
     <script src="canvasGifEncoder.js"></script>
     <script src="wasmGifEncoder.js"></script>
     <!-- GIF.js在GitHub Pages的CSP环境下无法正常工作，已移除 -->
@@ -680,8 +681,9 @@
             playSpeed: 1.0, // 播放速度倍数，1.0 = 200ms/帧
             gifGenerator: null, // GIF生成器实例
             fallbackGenerator: null, // 备用生成器实例
-            cspEncoder: null, // CSP友好编码器实例
+            simpleEncoder: null, // 简单编码器实例
             modernEncoder: null, // 现代编码器实例
+            cspEncoder: null, // CSP友好编码器实例
             canvasEncoder: null, // Canvas编码器实例
             wasmEncoder: null // WASM风格编码器实例
         };
@@ -694,10 +696,10 @@
             // 初始化所有GIF编码器
             console.log('初始化多种GIF编码器...');
             
-            // 1. CSP友好编码器
-            if (typeof CSPFriendlyGifEncoder !== 'undefined') {
-                state.cspEncoder = new CSPFriendlyGifEncoder();
-                console.log('✓ CSP友好编码器初始化成功');
+            // 1. 简单编码器（最可靠）
+            if (typeof SimpleGifEncoder !== 'undefined') {
+                state.simpleEncoder = new SimpleGifEncoder();
+                console.log('✓ 简单GIF编码器初始化成功');
             }
             
             // 2. 现代编码器
@@ -706,13 +708,19 @@
                 console.log('✓ 现代GIF编码器初始化成功');
             }
             
-            // 3. Canvas编码器
+            // 3. CSP友好编码器
+            if (typeof CSPFriendlyGifEncoder !== 'undefined') {
+                state.cspEncoder = new CSPFriendlyGifEncoder();
+                console.log('✓ CSP友好编码器初始化成功');
+            }
+            
+            // 4. Canvas编码器
             if (typeof CanvasGifEncoder !== 'undefined') {
                 state.canvasEncoder = new CanvasGifEncoder();
                 console.log('✓ Canvas GIF编码器初始化成功');
             }
             
-            // 4. WASM风格编码器
+            // 5. WASM风格编码器（最后尝试）
             if (typeof WasmGifEncoder !== 'undefined') {
                 state.wasmEncoder = new WasmGifEncoder();
                 console.log('✓ WASM风格编码器初始化成功');
@@ -1197,11 +1205,11 @@
                 const frameDelay = Math.round(200 / state.playSpeed);
                 let blob = null;
                 
-                // 按优先级尝试多种编码器
+                // 按优先级尝试多种编码器（从最可靠到最复杂）
                 const encoders = [
                     {
-                        name: 'WASM风格编码器',
-                        instance: state.wasmEncoder,
+                        name: '简单编码器',
+                        instance: state.simpleEncoder,
                         progress: 20
                     },
                     {

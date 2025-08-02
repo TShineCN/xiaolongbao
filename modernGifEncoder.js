@@ -138,7 +138,7 @@ class ModernGifEncoder {
     }
 
     /**
-     * 转换RGBA数据为调色板索引
+     * 转换RGBA数据为调色板索引（改进版）
      */
     convertToIndices(data) {
         const indices = [];
@@ -154,16 +154,27 @@ class ModernGifEncoder {
                 continue;
             }
             
-            // 简单的颜色量化到8色
+            // 改进的颜色量化，更准确地映射颜色
+            const brightness = (r + g + b) / 3;
             let index = 0;
-            if (r > 127 && g > 127 && b > 127) index = 1; // 白色
-            else if (r > 127 && g < 128 && b < 128) index = 2; // 红色
-            else if (r < 128 && g > 127 && b < 128) index = 3; // 绿色
-            else if (r < 128 && g < 128 && b > 127) index = 4; // 蓝色
-            else if (r > 127 && g > 127 && b < 128) index = 5; // 黄色
-            else if (r > 127 && g < 128 && b > 127) index = 6; // 洋红
-            else if (r < 128 && g > 127 && b > 127) index = 7; // 青色
-            else index = 0; // 默认黑色
+            
+            if (brightness < 32) {
+                index = 0; // 黑色
+            } else if (brightness > 224) {
+                index = 1; // 白色
+            } else if (r > g && r > b) {
+                index = 2; // 红色系
+            } else if (g > r && g > b) {
+                index = 3; // 绿色系
+            } else if (b > r && b > g) {
+                index = 4; // 蓝色系
+            } else if (r > 128 && g > 128) {
+                index = 5; // 黄色系
+            } else if (r > 128 && b > 128) {
+                index = 6; // 洋红系
+            } else {
+                index = 7; // 青色系
+            }
             
             indices.push(index);
         }
