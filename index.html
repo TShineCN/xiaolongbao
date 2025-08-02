@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>动态图组合成工具</title>
     <!-- 引入多种CSP友好的GIF编码器 -->
+    <script src="reliableGifEncoder.js"></script>
     <script src="simpleGifEncoder.js"></script>
     <script src="modernGifEncoder.js"></script>
     <script src="cspFriendlyGifEncoder.js"></script>
@@ -679,6 +680,7 @@
             frameInterval: null,
             composedFrames: {},
             playSpeed: 1.0, // 播放速度倍数，1.0 = 200ms/帧
+            reliableEncoder: null, // 可靠编码器实例 (最优先)
             gifGenerator: null, // GIF生成器实例
             fallbackGenerator: null, // 备用生成器实例
             simpleEncoder: null, // 简单编码器实例
@@ -696,7 +698,13 @@
             // 初始化所有GIF编码器
             console.log('初始化多种GIF编码器...');
             
-            // 1. 简单编码器（最可靠）
+            // 0. 可靠编码器（最优先）
+            if (typeof ReliableGifEncoder !== 'undefined') {
+                state.reliableEncoder = new ReliableGifEncoder();
+                console.log('✓ 可靠GIF编码器初始化成功');
+            }
+            
+            // 1. 简单编码器（备用）
             if (typeof SimpleGifEncoder !== 'undefined') {
                 state.simpleEncoder = new SimpleGifEncoder();
                 console.log('✓ 简单GIF编码器初始化成功');
@@ -1208,24 +1216,29 @@
                 // 按优先级尝试多种编码器（从最可靠到最复杂）
                 const encoders = [
                     {
+                        name: '可靠编码器',
+                        instance: state.reliableEncoder,
+                        progress: 10
+                    },
+                    {
                         name: '简单编码器',
                         instance: state.simpleEncoder,
-                        progress: 20
+                        progress: 30
                     },
                     {
                         name: '现代编码器',
                         instance: state.modernEncoder,
-                        progress: 40
+                        progress: 50
                     },
                     {
                         name: 'CSP友好编码器',
                         instance: state.cspEncoder,
-                        progress: 60
+                        progress: 70
                     },
                     {
                         name: 'Canvas编码器',
                         instance: state.canvasEncoder,
-                        progress: 80
+                        progress: 90
                     }
                 ];
                 
@@ -1254,6 +1267,8 @@
                             // 生成GIF
                             if (encoder.name === 'Canvas编码器') {
                                 blob = await encoder.instance.createAnimation();
+                            } else if (encoder.name === '可靠编码器') {
+                                blob = encoder.instance.createBlob();
                             } else {
                                 blob = encoder.instance.createBlob();
                             }

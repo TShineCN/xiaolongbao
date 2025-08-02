@@ -55,14 +55,20 @@ class SimpleGifEncoder {
         this.writeUint16(gif, this.width);   // 画布宽度
         this.writeUint16(gif, this.height);  // 画布高度
         
-        // 全局颜色表信息
-        gif.push(0xF0);  // 11110000: 全局颜色表标志=1, 颜色分辨率=111, 排序标志=0, 全局颜色表大小=000 (2色)
+        // 全局颜色表信息 (8色 = 3位 = 大小值2)
+        gif.push(0xF2);  // 11110010: 全局颜色表=1, 颜色分辨率=111, 排序=0, 大小=010 (8色)
         gif.push(0x00);  // 背景颜色索引
         gif.push(0x00);  // 像素长宽比
         
-        // 全局颜色表 (2色: 黑白)
-        gif.push(0x00, 0x00, 0x00); // 颜色0: 黑色
-        gif.push(0xFF, 0xFF, 0xFF); // 颜色1: 白色
+        // 全局颜色表 (8色)
+        gif.push(0x00, 0x00, 0x00); // 0: 黑色
+        gif.push(0x80, 0x00, 0x00); // 1: 深红
+        gif.push(0x00, 0x80, 0x00); // 2: 深绿
+        gif.push(0x80, 0x80, 0x00); // 3: 深黄
+        gif.push(0x00, 0x00, 0x80); // 4: 深蓝
+        gif.push(0x80, 0x00, 0x80); // 5: 深紫
+        gif.push(0x00, 0x80, 0x80); // 6: 深青
+        gif.push(0xFF, 0xFF, 0xFF); // 7: 白色
         
         // 应用程序扩展 (NETSCAPE2.0 - 用于循环)
         gif.push(0x21, 0xFF, 0x0B); // 扩展介绍符, 应用程序扩展标签, 块大小
@@ -113,17 +119,17 @@ class SimpleGifEncoder {
         this.writeUint16(gif, frame.height);// 图像高度
         gif.push(0x00);    // 局部颜色表标志 = 0 (使用全局颜色表)
         
-        // 将RGBA数据转换为黑白索引
-        const indices = this.convertToBlackWhite(frame.data);
+        // 将RGBA数据转换为8色索引
+        const indices = this.quantizeColors(frame.data);
         
         // 简单的无压缩LZW编码
         this.writeLZWData(gif, indices);
     }
 
     /**
-     * 转换为黑白数据
+     * 量化为256色调色板
      */
-    convertToBlackWhite(rgbaData) {
+    quantizeColors(rgbaData) {
         const indices = [];
         
         for (let i = 0; i < rgbaData.length; i += 4) {
@@ -132,11 +138,17 @@ class SimpleGifEncoder {
             const b = rgbaData[i + 2];
             const a = rgbaData[i + 3];
             
-            // 如果透明或者颜色偏暗，使用黑色(0)，否则使用白色(1)
-            if (a < 128 || (r + g + b) < 384) {
-                indices.push(0); // 黑色
+            // 简单8色量化
+            if (a < 128) {
+                indices.push(0); // 透明/黑色
             } else {
-                indices.push(1); // 白色
+                // 根据RGB值映射到8色调色板
+                const rIndex = r > 127 ? 1 : 0;
+                const gIndex = g > 127 ? 1 : 0;
+                const bIndex = b > 127 ? 1 : 0;
+                
+                const colorIndex = (rIndex << 2) | (gIndex << 1) | bIndex;
+                indices.push(colorIndex);
             }
         }
         
@@ -148,12 +160,12 @@ class SimpleGifEncoder {
      */
     writeLZWData(gif, indices) {
         // LZW最小代码大小
-        const minCodeSize = 2; // 2色需要2位
+        const minCodeSize = 3; // 8色需要3位
         gif.push(minCodeSize);
         
         // 清除码和结束码
-        const clearCode = 4;  // 2^2
-        const endCode = 5;
+        const clearCode = 8;  // 2^3
+        const endCode = 9;
         
         let bitBuffer = 0;
         let bitCount = 0;
@@ -171,7 +183,7 @@ class SimpleGifEncoder {
             }
         };
         
-        let codeSize = 3; // 开始用3位编码
+        let codeSize = 4; // 开始用4位编码 (3+1)
         
         // 写入清除码
         writeBits(clearCode, codeSize);
