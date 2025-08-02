@@ -8,6 +8,8 @@
     <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
     <!-- 引入独立的GIF生成器 -->
     <script src="gifGenerator.js"></script>
+    <!-- 引入备用GIF生成器 -->
+    <script src="fallbackGifGenerator.js"></script>
     <style>
         * {
             margin: 0;
@@ -657,7 +659,8 @@
             frameInterval: null,
             composedFrames: {},
             playSpeed: 1.0, // 播放速度倍数，1.0 = 200ms/帧
-            gifGenerator: null // GIF生成器实例
+            gifGenerator: null, // GIF生成器实例
+            fallbackGenerator: null // 备用生成器实例
         };
 
         // 初始化函数
@@ -668,9 +671,17 @@
             // 初始化GIF生成器
             if (typeof GifGenerator !== 'undefined') {
                 state.gifGenerator = new GifGenerator();
-                console.log('GIF生成器初始化成功');
+                console.log('主GIF生成器初始化成功');
             } else {
-                console.warn('GIF生成器未加载');
+                console.warn('主GIF生成器未加载');
+            }
+            
+            // 初始化备用生成器
+            if (typeof FallbackGifGenerator !== 'undefined') {
+                state.fallbackGenerator = new FallbackGifGenerator();
+                console.log('备用GIF生成器初始化成功');
+            } else {
+                console.warn('备用GIF生成器未加载');
             }
             
             setupButtons();
@@ -1109,11 +1120,6 @@
                 return;
             }
             
-            if (!state.gifGenerator) {
-                updateProgress('GIF生成器未初始化，请刷新页面重试');
-                return;
-            }
-            
             updateProgress('正在生成GIF...', 0);
             dom.saveBtn.disabled = true;
             dom.progressContainer.style.display = 'block';
@@ -1136,9 +1142,8 @@
                 
                 updateProgress('正在生成GIF文件...');
                 
-                // 使用新的GIF生成器
                 const frameDelay = Math.round(200 / state.playSpeed);
-                const blob = await state.gifGenerator.createGif(frameCanvases, {
+                const gifOptions = {
                     width: canvasWidth,
                     height: canvasHeight,
                     frameDelay: frameDelay,
@@ -1147,8 +1152,51 @@
                         const totalProgress = 50 + (progress * 50);
                         updateProgress(`正在生成GIF... ${Math.round(totalProgress)}%`, totalProgress);
                     }
-                });
+                };
                 
+                let blob = null;
+                
+                // 第一优先级：使用主GIF生成器
+                if (state.gifGenerator) {
+                    try {
+                        updateProgress('使用主生成器创建GIF...');
+                        blob = await state.gifGenerator.createGif(frameCanvases, gifOptions);
+                    } catch (error) {
+                        console.error('主GIF生成器失败:', error);
+                        updateProgress('主生成器失败，尝试备用方案...');
+                    }
+                }
+                
+                // 第二优先级：使用备用生成器
+                if (!blob && state.fallbackGenerator) {
+                    try {
+                        updateProgress('使用备用生成器创建GIF...');
+                        blob = await state.fallbackGenerator.createSimpleGif(frameCanvases, gifOptions);
+                    } catch (error) {
+                        console.error('备用GIF生成器失败:', error);
+                        updateProgress('备用生成器失败，尝试最终方案...');
+                    }
+                }
+                
+                // 第三优先级：直接使用gif.js
+                if (!blob && typeof GIF !== 'undefined') {
+                    try {
+                        updateProgress('直接使用gif.js创建GIF...');
+                        blob = await createGifDirectly(frameCanvases, gifOptions);
+                    } catch (error) {
+                        console.error('直接gif.js失败:', error);
+                        updateProgress('所有GIF方案失败，下载图片序列...');
+                    }
+                }
+                
+                // 最终方案：下载图片序列
+                if (!blob) {
+                    updateProgress('下载图片序列作为备选...');
+                    await downloadFrameSequence(frameCanvases, anim.name);
+                    return;
+                }
+                
+                // 成功生成GIF
                 const fileName = `${anim.name.replace(/\s+/g, '_')}_动画_${state.playSpeed}x速度.gif`;
                 const success = downloadFile(blob, fileName, 'GIF动画');
                 
@@ -1221,6 +1269,55 @@
             }
             
             return compositeCanvas;
+        }
+        
+        // 直接使用gif.js创建GIF
+        async function createGifDirectly(frameCanvases, options) {
+            return new Promise((resolve, reject) => {
+                try {
+                    const gif = new GIF({
+                        workers: 0,
+                        quality: options.quality || 10,
+                        width: options.width || 800,
+                        height: options.height || 800,
+                        repeat: 0,
+                        workerScript: null
+                    });
+
+                    frameCanvases.forEach((canvas) => {
+                        gif.addFrame(canvas, { delay: options.frameDelay || 200 });
+                    });
+
+                    gif.on('finished', resolve);
+                    gif.on('error', reject);
+
+                    setTimeout(() => {
+                        reject(new Error('直接gif.js超时'));
+                    }, 10000);
+
+                    gif.render();
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        }
+        
+        // 下载帧序列
+        async function downloadFrameSequence(frameCanvases, animName) {
+            for (let i = 0; i < frameCanvases.length; i++) {
+                const canvas = frameCanvases[i];
+                const blob = await new Promise(resolve => {
+                    canvas.toBlob(resolve, 'image/png', 1.0);
+                });
+                
+                const fileName = `${animName.replace(/\s+/g, '_')}_frame_${i}.png`;
+                downloadFile(blob, fileName, 'PNG图片');
+                
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            
+            updateProgress('图片序列下载完成！请使用其他工具制作GIF', 100);
+            setTimeout(resetSaveButton, 3000);
         }
         
         // 重置保存按钮状态

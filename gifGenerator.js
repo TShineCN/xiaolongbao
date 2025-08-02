@@ -1,33 +1,11 @@
 /**
  * 独立的GIF生成器类
- * 使用gif.js库创建动画GIF
+ * 使用gif.js库创建动画GIF，强制禁用Workers避免404错误
  */
 class GifGenerator {
     constructor() {
-        this.isWorkerAvailable = false;
-        this.checkWorkerSupport();
-    }
-
-    /**
-     * 检查Web Worker支持情况
-     */
-    checkWorkerSupport() {
-        try {
-            // 检查是否有gif.js库
-            if (typeof GIF === 'undefined') {
-                console.warn('GIF.js库未加载');
-                return false;
-            }
-            
-            // 尝试创建一个简单的worker测试
-            const testWorker = new Worker(URL.createObjectURL(new Blob(['self.close();'], {type: 'application/javascript'})));
-            testWorker.terminate();
-            this.isWorkerAvailable = true;
-            console.log('Web Worker支持可用');
-        } catch (error) {
-            console.warn('Web Worker不可用，将使用主线程模式:', error.message);
-            this.isWorkerAvailable = false;
-        }
+        this.isWorkerAvailable = false; // 强制禁用workers
+        console.log('GIF生成器初始化：强制禁用Workers模式');
     }
 
     /**
@@ -38,19 +16,25 @@ class GifGenerator {
      */
     async createGif(canvasFrames, options = {}) {
         const config = {
-            workers: this.isWorkerAvailable ? 2 : 0, // 根据支持情况决定worker数量
+            workers: 0, // 强制设置为0，禁用所有workers
             quality: options.quality || 10,
             width: options.width || 800,
             height: options.height || 800,
             repeat: options.repeat !== undefined ? options.repeat : 0, // 0表示无限循环
             transparent: options.transparent || null,
             background: options.background || null,
-            debug: options.debug || false
+            debug: options.debug || false,
+            workerScript: null // 明确设置为null
         };
 
         return new Promise((resolve, reject) => {
             try {
                 console.log('开始创建GIF，配置:', config);
+                
+                // 检查gif.js是否可用
+                if (typeof GIF === 'undefined') {
+                    throw new Error('GIF.js库未加载');
+                }
                 
                 const gif = new GIF(config);
                 const frameDelay = options.frameDelay || 200;
@@ -98,7 +82,7 @@ class GifGenerator {
                 gif.on('error', () => clearTimeout(timeout));
 
                 // 开始渲染
-                console.log('开始渲染GIF...');
+                console.log('开始渲染GIF（主线程模式）...');
                 gif.render();
 
             } catch (error) {
@@ -211,15 +195,15 @@ class GifGenerator {
     checkCompatibility() {
         const result = {
             canvas: !!document.createElement('canvas').getContext,
-            webWorker: typeof Worker !== 'undefined',
+            webWorker: false, // 强制设为false，因为我们不使用workers
             blob: typeof Blob !== 'undefined',
             gifJs: typeof GIF !== 'undefined',
             objectUrl: typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function'
         };
         
-        result.compatible = Object.values(result).every(Boolean);
+        result.compatible = result.canvas && result.blob && result.gifJs && result.objectUrl;
         
-        console.log('浏览器兼容性检查:', result);
+        console.log('浏览器兼容性检查（无Worker模式）:', result);
         return result;
     }
 }
