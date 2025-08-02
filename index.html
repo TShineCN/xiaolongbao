@@ -4,8 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>动态图组合成工具</title>
-    <!-- 引入CSP友好的GIF编码器 -->
+    <!-- 引入多种CSP友好的GIF编码器 -->
     <script src="cspFriendlyGifEncoder.js"></script>
+    <script src="modernGifEncoder.js"></script>
+    <script src="canvasGifEncoder.js"></script>
+    <script src="wasmGifEncoder.js"></script>
     <!-- GIF.js在GitHub Pages的CSP环境下无法正常工作，已移除 -->
     <!-- 引入独立的GIF生成器 -->
     <script src="gifGenerator.js"></script>
@@ -677,7 +680,10 @@
             playSpeed: 1.0, // 播放速度倍数，1.0 = 200ms/帧
             gifGenerator: null, // GIF生成器实例
             fallbackGenerator: null, // 备用生成器实例
-            cspEncoder: null // CSP友好编码器实例
+            cspEncoder: null, // CSP友好编码器实例
+            modernEncoder: null, // 现代编码器实例
+            canvasEncoder: null, // Canvas编码器实例
+            wasmEncoder: null // WASM风格编码器实例
         };
 
         // 初始化函数
@@ -685,28 +691,42 @@
             // 添加这一行解决跨域问题
             dom.ctx = dom.canvas.getContext('2d', { willReadFrequently: true });
             
-            // 初始化CSP友好编码器（最高优先级）
+            // 初始化所有GIF编码器
+            console.log('初始化多种GIF编码器...');
+            
+            // 1. CSP友好编码器
             if (typeof CSPFriendlyGifEncoder !== 'undefined') {
                 state.cspEncoder = new CSPFriendlyGifEncoder();
-                console.log('CSP友好编码器初始化成功');
-            } else {
-                console.warn('CSP友好编码器未加载');
+                console.log('✓ CSP友好编码器初始化成功');
             }
             
-            // 初始化GIF生成器
+            // 2. 现代编码器
+            if (typeof ModernGifEncoder !== 'undefined') {
+                state.modernEncoder = new ModernGifEncoder();
+                console.log('✓ 现代GIF编码器初始化成功');
+            }
+            
+            // 3. Canvas编码器
+            if (typeof CanvasGifEncoder !== 'undefined') {
+                state.canvasEncoder = new CanvasGifEncoder();
+                console.log('✓ Canvas GIF编码器初始化成功');
+            }
+            
+            // 4. WASM风格编码器
+            if (typeof WasmGifEncoder !== 'undefined') {
+                state.wasmEncoder = new WasmGifEncoder();
+                console.log('✓ WASM风格编码器初始化成功');
+            }
+            
+            // 5. 原有编码器（备用）
             if (typeof GifGenerator !== 'undefined') {
                 state.gifGenerator = new GifGenerator();
-                console.log('主GIF生成器初始化成功');
-            } else {
-                console.warn('主GIF生成器未加载');
+                console.log('✓ 主GIF生成器初始化成功');
             }
             
-            // 初始化备用生成器
             if (typeof FallbackGifGenerator !== 'undefined') {
                 state.fallbackGenerator = new FallbackGifGenerator();
-                console.log('备用GIF生成器初始化成功');
-            } else {
-                console.warn('备用GIF生成器未加载');
+                console.log('✓ 备用GIF生成器初始化成功');
             }
             
             setupButtons();
@@ -1177,19 +1197,71 @@
                 const frameDelay = Math.round(200 / state.playSpeed);
                 let blob = null;
                 
-                // 优先使用CSP友好编码器（唯一兼容GitHub Pages的方案）
-                if (state.cspEncoder && frameCanvases.length > 0) {
-                    try {
-                        updateProgress('使用CSP友好编码器创建GIF...', 35);
-                        blob = await createGifWithCSPEncoder(frameCanvases, {
-                            width: canvasWidth,
-                            height: canvasHeight,
-                            frameDelay: frameDelay
-                        });
-                        console.log('CSP友好编码器成功生成GIF');
-                    } catch (error) {
-                        console.error('CSP友好编码器失败:', error);
-                        updateProgress('CSP编码器失败，下载图片序列...', 90);
+                // 按优先级尝试多种编码器
+                const encoders = [
+                    {
+                        name: 'WASM风格编码器',
+                        instance: state.wasmEncoder,
+                        progress: 20
+                    },
+                    {
+                        name: '现代编码器',
+                        instance: state.modernEncoder,
+                        progress: 40
+                    },
+                    {
+                        name: 'CSP友好编码器',
+                        instance: state.cspEncoder,
+                        progress: 60
+                    },
+                    {
+                        name: 'Canvas编码器',
+                        instance: state.canvasEncoder,
+                        progress: 80
+                    }
+                ];
+                
+                for (const encoder of encoders) {
+                    if (!blob && encoder.instance && frameCanvases.length > 0) {
+                        try {
+                            updateProgress(`使用${encoder.name}创建GIF...`, encoder.progress);
+                            
+                            // 设置进度回调
+                            encoder.instance.onProgress = (progress) => {
+                                const totalProgress = encoder.progress + (progress * 15);
+                                updateProgress(`${encoder.name}生成中... ${Math.round(totalProgress)}%`, totalProgress);
+                            };
+                            
+                            // 清空之前的帧
+                            encoder.instance.frames = [];
+                            encoder.instance.width = canvasWidth;
+                            encoder.instance.height = canvasHeight;
+                            encoder.instance.delay = frameDelay;
+                            
+                            // 添加所有帧
+                            for (const canvas of frameCanvases) {
+                                encoder.instance.addFrame(canvas, { delay: frameDelay });
+                            }
+                            
+                            // 生成GIF
+                            if (encoder.name === 'Canvas编码器') {
+                                blob = await encoder.instance.createAnimation();
+                            } else {
+                                blob = encoder.instance.createBlob();
+                            }
+                            
+                            if (blob && blob.size > 0) {
+                                console.log(`${encoder.name}成功生成GIF: ${(blob.size/1024).toFixed(1)}KB`);
+                                break;
+                            } else {
+                                console.warn(`${encoder.name}生成的blob无效`);
+                                blob = null;
+                            }
+                            
+                        } catch (error) {
+                            console.error(`${encoder.name}失败:`, error);
+                            blob = null;
+                        }
                     }
                 }
                 
