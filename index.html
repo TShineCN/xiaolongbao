@@ -4,11 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>动态图组合成工具</title>
-    <!-- 使用多个可靠的GIF生成库作为备选 -->
-    <script src="https://cdn.jsdelivr.net/npm/gifshot@0.4.5/dist/gifshot.min.js"></script>
-    <script src="https://unpkg.com/gif.js@0.2.0/dist/gif.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <!-- 使用可靠的GIF生成库 -->
+    <script src="https://cdn.jsdelivr.net/npm/gif.js@0.2.0/dist/gif.js"></script>
     <style>
         * {
             margin: 0;
@@ -464,6 +461,7 @@
             </div>
             
             <div class="action-buttons">
+                <button class="action-btn play-btn" id="testBtn">测试合成图片</button>
                 <button class="action-btn save-btn" id="saveBtn">保存为GIF</button>
             </div>
             
@@ -635,6 +633,7 @@
             uploadArea: document.getElementById('uploadArea'),
             imageUpload: document.getElementById('imageUpload'),
             userImagePreview: document.getElementById('userImagePreview'),
+            testBtn: document.getElementById('testBtn'),
             saveBtn: document.getElementById('saveBtn'),
             statusText: document.getElementById('statusText'),
             animName: document.getElementById('animName'),
@@ -823,6 +822,9 @@
             // 文件上传事件
             dom.imageUpload.addEventListener('change', handleImageUpload);
             
+            // 测试按钮事件
+            dom.testBtn.addEventListener('click', saveComposedImages);
+            
             // 保存按钮事件
             dom.saveBtn.addEventListener('click', saveAsGif);
             
@@ -1006,38 +1008,18 @@
             state.isPlaying = false;
         }
 
-        // 使用gifshot库重写saveAsGif函数
-        async function saveAsGif() {
+        // 合成并保存图片到images文件夹用于测试
+        async function saveComposedImages() {
             if (!state.userImage || !state.userImage.complete) {
                 dom.statusText.textContent = '请先上传图片！';
                 return;
             }
             
-            // 检查gifshot库是否加载
-            if (typeof gifshot === 'undefined') {
-                dom.statusText.textContent = 'gifshot库未加载，尝试备选库...';
-                await saveAsGifSecondary();
-                return;
-            }
-            
-            dom.statusText.textContent = '正在生成GIF...';
-            dom.saveBtn.disabled = true;
-            dom.progressContainer.style.display = 'block';
-            dom.progressBar.style.width = '0%';
-            
             const anim = config.animations[state.currentAnimation];
             
-            // 计算GIF延时（基础200ms除以速度倍数）
-            const frameDelay = Math.round(200 / state.playSpeed) / 1000; // gifshot使用秒为单位
-            
             try {
-                console.log(`开始生成GIF: ${anim.name}, 帧数: ${anim.frameCount}, 延时: ${frameDelay}s`);
-                
-                // 生成所有帧的canvas数组
-                const frameCanvases = [];
-                
                 for (let i = 0; i < anim.frameCount; i++) {
-                    dom.statusText.textContent = `正在处理第 ${i + 1}/${anim.frameCount} 帧...`;
+                    dom.statusText.textContent = `正在合成第 ${i + 1}/${anim.frameCount} 帧...`;
                     
                     // 创建合成canvas
                     const compositeCanvas = document.createElement('canvas');
@@ -1045,24 +1027,17 @@
                     compositeCanvas.height = 800;
                     const ctx = compositeCanvas.getContext('2d');
                     
-                    // 先绘制背景图片（按原始大小居中）
+                    // 绘制背景图片
                     if (anim.frameImages[i] && anim.frameImages[i].complete) {
                         const bgImg = anim.frameImages[i];
                         const x = (800 - bgImg.naturalWidth) / 2;
                         const y = (800 - bgImg.naturalHeight) / 2;
                         ctx.drawImage(bgImg, x, y, bgImg.naturalWidth, bgImg.naturalHeight);
-                        console.log(`帧${i}: 背景图尺寸 ${bgImg.naturalWidth}x${bgImg.naturalHeight}, 位置 (${x}, ${y})`);
-                    } else {
-                        // 如果背景图片未加载，使用黑色背景
-                        ctx.fillStyle = '#000';
-                        ctx.fillRect(0, 0, 800, 800);
-                        console.log(`帧${i}: 使用黑色背景`);
                     }
                     
-                    // 然后绘制用户图片（如果存在且已处理）
+                    // 绘制用户图片
                     if (state.processedUserImage) {
                         const pos = anim.overlayPositions[i];
-                        
                         ctx.save();
                         ctx.translate(pos.x, pos.y);
                         ctx.rotate(pos.rotation * Math.PI / 180);
@@ -1077,73 +1052,161 @@
                             imgWidth,
                             imgHeight
                         );
-                        
                         ctx.restore();
-                        
-                        console.log(`帧${i}: 用户图片位置 (${pos.x}, ${pos.y}), 旋转 ${pos.rotation}°, 缩放 ${pos.scale}`);
                     }
                     
-                    frameCanvases.push(compositeCanvas);
+                    // 转换为blob并保存
+                    const blob = await new Promise(resolve => {
+                        compositeCanvas.toBlob(resolve, 'image/png', 1.0);
+                    });
+                    
+                    // 下载合成后的图片
+                    const fileName = `composed_frame_${i}.png`;
+                    downloadImage(blob, fileName);
+                    
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+                
+                dom.statusText.textContent = '合成图片保存完成！';
+            } catch (error) {
+                console.error('合成图片失败:', error);
+                dom.statusText.textContent = '合成图片失败';
+            }
+        }
+        
+        // 下载单张图片
+        function downloadImage(blob, fileName) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }
+        
+        // 重写的GIF保存函数，使用gif.js库
+        async function saveAsGif() {
+            if (!state.userImage || !state.userImage.complete) {
+                dom.statusText.textContent = '请先上传图片！';
+                return;
+            }
+            
+            // 检查gif.js库是否加载
+            if (typeof GIF === 'undefined') {
+                dom.statusText.textContent = 'GIF库未加载，请刷新页面重试';
+                return;
+            }
+            
+            dom.statusText.textContent = '正在生成GIF...';
+            dom.saveBtn.disabled = true;
+            dom.progressContainer.style.display = 'block';
+            dom.progressBar.style.width = '0%';
+            
+            const anim = config.animations[state.currentAnimation];
+            
+            // 计算GIF延时（基础200ms除以速度倍数）
+            const frameDelay = Math.round(200 / state.playSpeed);
+            
+            try {
+                console.log(`开始生成GIF: ${anim.name}, 帧数: ${anim.frameCount}, 延时: ${frameDelay}ms`);
+                
+                // 创建GIF实例
+                const gif = new GIF({
+                    workers: 2,
+                    quality: 10,
+                    width: 800,
+                    height: 800,
+                    repeat: 0 // 0表示无限循环
+                });
+                
+                // 生成所有帧并添加到GIF
+                for (let i = 0; i < anim.frameCount; i++) {
+                    dom.statusText.textContent = `正在处理第 ${i + 1}/${anim.frameCount} 帧...`;
+                    
+                    // 创建合成canvas
+                    const compositeCanvas = document.createElement('canvas');
+                    compositeCanvas.width = 800;
+                    compositeCanvas.height = 800;
+                    const ctx = compositeCanvas.getContext('2d');
+                    
+                    // 绘制背景图片
+                    if (anim.frameImages[i] && anim.frameImages[i].complete) {
+                        const bgImg = anim.frameImages[i];
+                        const x = (800 - bgImg.naturalWidth) / 2;
+                        const y = (800 - bgImg.naturalHeight) / 2;
+                        ctx.drawImage(bgImg, x, y, bgImg.naturalWidth, bgImg.naturalHeight);
+                    } else {
+                        // 黑色背景
+                        ctx.fillStyle = '#000';
+                        ctx.fillRect(0, 0, 800, 800);
+                    }
+                    
+                    // 绘制用户图片
+                    if (state.processedUserImage) {
+                        const pos = anim.overlayPositions[i];
+                        ctx.save();
+                        ctx.translate(pos.x, pos.y);
+                        ctx.rotate(pos.rotation * Math.PI / 180);
+                        
+                        const imgWidth = state.processedUserImage.width * pos.scale;
+                        const imgHeight = state.processedUserImage.height * pos.scale;
+                        
+                        ctx.drawImage(
+                            state.processedUserImage, 
+                            -imgWidth/2, 
+                            -imgHeight/2,
+                            imgWidth,
+                            imgHeight
+                        );
+                        ctx.restore();
+                    }
+                    
+                    // 添加帧到GIF
+                    gif.addFrame(compositeCanvas, {delay: frameDelay});
                     
                     // 更新进度
                     const progress = ((i + 1) / anim.frameCount) * 50;
                     dom.progressBar.style.width = `${progress}%`;
                     
                     // 让浏览器有时间更新UI
-                    await new Promise(resolve => setTimeout(resolve, 30));
+                    await new Promise(resolve => setTimeout(resolve, 50));
                 }
                 
-                dom.statusText.textContent = '正在生成GIF文件...';
-                dom.progressBar.style.width = '60%';
+                dom.statusText.textContent = '正在渲染GIF...';
                 
-                // 使用gifshot生成GIF
-                gifshot.createGIF({
-                    images: frameCanvases,
-                    interval: frameDelay,
-                    gifWidth: 800,
-                    gifHeight: 800,
-                    quality: 10,
-                    numWorkers: 0, // 禁用workers避免兼容性问题
-                    progressCallback: function(captureProgress) {
-                        const totalProgress = 60 + (captureProgress * 40);
-                        dom.progressBar.style.width = `${totalProgress}%`;
-                        dom.statusText.textContent = `正在生成GIF... ${Math.round(totalProgress)}%`;
-                        console.log('GIF生成进度:', Math.round(totalProgress) + '%');
-                    },
-                    completeCallback: function() {
-                        dom.statusText.textContent = '正在准备下载...';
-                        dom.progressBar.style.width = '95%';
-                    }
-                }, function(obj) {
-                    if (!obj.error) {
-                        console.log('GIF生成成功');
-                        dom.progressBar.style.width = '100%';
-                        
-                        // 创建blob并下载
-                        const byteCharacters = atob(obj.image.split(',')[1]);
-                        const byteNumbers = new Array(byteCharacters.length);
-                        for (let i = 0; i < byteCharacters.length; i++) {
-                            byteNumbers[i] = byteCharacters.charCodeAt(i);
-                        }
-                        const byteArray = new Uint8Array(byteNumbers);
-                        const blob = new Blob([byteArray], {type: 'image/gif'});
-                        
-                        console.log('GIF文件大小:', (blob.size / 1024 / 1024).toFixed(2), 'MB');
-                        
-                        const fileName = `${anim.name.replace(/\s+/g, '_')}_动画_${state.playSpeed}x速度.gif`;
-                        downloadGif(blob, fileName);
-                        
-                    } else {
-                        console.error('gifshot生成失败:', obj.error);
-                        dom.statusText.textContent = 'gifshot失败，尝试备选库...';
-                        saveAsGifSecondary();
-                    }
+                // 设置GIF事件监听器
+                gif.on('progress', (progress) => {
+                    const totalProgress = 50 + (progress * 50);
+                    dom.progressBar.style.width = `${totalProgress}%`;
+                    dom.statusText.textContent = `正在渲染GIF... ${Math.round(totalProgress)}%`;
                 });
                 
+                gif.on('finished', (blob) => {
+                    console.log('GIF生成成功');
+                    dom.progressBar.style.width = '100%';
+                    
+                    console.log('GIF文件大小:', (blob.size / 1024 / 1024).toFixed(2), 'MB');
+                    
+                    const fileName = `${anim.name.replace(/\s+/g, '_')}_动画_${state.playSpeed}x速度.gif`;
+                    downloadGif(blob, fileName);
+                });
+                
+                gif.on('error', (error) => {
+                    console.error('GIF生成失败:', error);
+                    dom.statusText.textContent = 'GIF生成失败，请重试';
+                    resetSaveButton();
+                });
+                
+                // 开始渲染GIF
+                gif.render();
+                
             } catch (error) {
-                console.error('gifshot出错:', error);
-                dom.statusText.textContent = 'gifshot出错，尝试备选库...';
-                await saveAsGifSecondary();
+                console.error('GIF生成出错:', error);
+                dom.statusText.textContent = 'GIF生成出错，请重试';
+                resetSaveButton();
             }
         }
         
@@ -1191,247 +1254,6 @@
             dom.progressBar.style.width = '0%';
         }
         
-        // 第二备选：使用gif.js库
-        async function saveAsGifSecondary() {
-            if (typeof GIF === 'undefined') {
-                console.log('gif.js也不可用，使用最终备选方案');
-                await saveAsGifFallback();
-                return;
-            }
-            
-            try {
-                const anim = config.animations[state.currentAnimation];
-                const frameDelay = Math.round(200 / state.playSpeed);
-                
-                dom.statusText.textContent = '使用备选GIF库生成...';
-                
-                const gif = new GIF({
-                    workers: 0,
-                    quality: 10,
-                    width: 800,
-                    height: 800,
-                    repeat: 0,
-                    debug: false
-                });
-                
-                // 生成每一帧并添加到GIF
-                for (let i = 0; i < anim.frameCount; i++) {
-                    dom.statusText.textContent = `备选方案处理第 ${i + 1}/${anim.frameCount} 帧...`;
-                    
-                    const canvas = document.createElement('canvas');
-                    canvas.width = 800;
-                    canvas.height = 800;
-                    const ctx = canvas.getContext('2d');
-                    
-                    // 绘制背景图片
-                    if (anim.frameImages[i] && anim.frameImages[i].complete) {
-                        const bgImg = anim.frameImages[i];
-                        const x = (800 - bgImg.naturalWidth) / 2;
-                        const y = (800 - bgImg.naturalHeight) / 2;
-                        ctx.drawImage(bgImg, x, y, bgImg.naturalWidth, bgImg.naturalHeight);
-                    } else {
-                        ctx.fillStyle = '#000';
-                        ctx.fillRect(0, 0, 800, 800);
-                    }
-                    
-                    // 绘制用户图片
-                    if (state.processedUserImage) {
-                        const pos = anim.overlayPositions[i];
-                        ctx.save();
-                        ctx.translate(pos.x, pos.y);
-                        ctx.rotate(pos.rotation * Math.PI / 180);
-                        
-                        const imgWidth = state.processedUserImage.width * pos.scale;
-                        const imgHeight = state.processedUserImage.height * pos.scale;
-                        
-                        ctx.drawImage(
-                            state.processedUserImage,
-                            -imgWidth/2,
-                            -imgHeight/2,
-                            imgWidth,
-                            imgHeight
-                        );
-                        ctx.restore();
-                    }
-                    
-                    gif.addFrame(canvas, {delay: frameDelay});
-                    
-                    const progress = ((i + 1) / anim.frameCount) * 60;
-                    dom.progressBar.style.width = `${progress}%`;
-                    
-                    await new Promise(resolve => setTimeout(resolve, 50));
-                }
-                
-                dom.statusText.textContent = '正在渲染备选GIF...';
-                
-                // 设置较短的超时
-                const timeout = setTimeout(() => {
-                    console.log('备选GIF也超时，使用最终方案');
-                    saveAsGifFallback();
-                }, 20000);
-                
-                gif.on('finished', (blob) => {
-                    clearTimeout(timeout);
-                    console.log('备选GIF生成成功');
-                    const fileName = `${anim.name.replace(/\s+/g, '_')}_动画_${state.playSpeed}x速度.gif`;
-                    downloadGif(blob, fileName);
-                });
-                
-                gif.on('progress', (progress) => {
-                    const totalProgress = 60 + (progress * 40);
-                    dom.progressBar.style.width = `${totalProgress}%`;
-                    dom.statusText.textContent = `正在渲染备选GIF... ${Math.round(totalProgress)}%`;
-                });
-                
-                gif.on('error', (error) => {
-                    clearTimeout(timeout);
-                    console.error('备选GIF失败:', error);
-                    saveAsGifFallback();
-                });
-                
-                gif.render();
-                
-            } catch (error) {
-                console.error('备选GIF方案失败:', error);
-                await saveAsGifFallback();
-            }
-        }
-        
-        // 最终备选：生成图片序列
-        async function saveAsGifFallback() {
-            try {
-                const anim = config.animations[state.currentAnimation];
-                const frameDelay = Math.round(200 / state.playSpeed);
-                
-                dom.statusText.textContent = '使用备选方案生成图片序列...';
-                
-                // 生成所有帧的图片数据
-                const frameBlobs = [];
-                
-                for (let i = 0; i < anim.frameCount; i++) {
-                    dom.statusText.textContent = `正在生成第 ${i + 1}/${anim.frameCount} 帧图片...`;
-                    
-                    // 创建合成canvas
-                    const compositeCanvas = document.createElement('canvas');
-                    compositeCanvas.width = 800;
-                    compositeCanvas.height = 800;
-                    const ctx = compositeCanvas.getContext('2d');
-                    
-                    // 绘制背景图片
-                    if (anim.frameImages[i] && anim.frameImages[i].complete) {
-                        const bgImg = anim.frameImages[i];
-                        const x = (800 - bgImg.naturalWidth) / 2;
-                        const y = (800 - bgImg.naturalHeight) / 2;
-                        ctx.drawImage(bgImg, x, y, bgImg.naturalWidth, bgImg.naturalHeight);
-                    }
-                    
-                    // 绘制用户图片
-                    if (state.processedUserImage) {
-                        const pos = anim.overlayPositions[i];
-                        ctx.save();
-                        ctx.translate(pos.x, pos.y);
-                        ctx.rotate(pos.rotation * Math.PI / 180);
-                        
-                        const imgWidth = state.processedUserImage.width * pos.scale;
-                        const imgHeight = state.processedUserImage.height * pos.scale;
-                        
-                        ctx.drawImage(
-                            state.processedUserImage, 
-                            -imgWidth/2, 
-                            -imgHeight/2,
-                            imgWidth,
-                            imgHeight
-                        );
-                        ctx.restore();
-                    }
-                    
-                    // 转换为blob
-                    const blob = await new Promise(resolve => {
-                        compositeCanvas.toBlob(resolve, 'image/png', 1.0);
-                    });
-                    
-                    frameBlobs.push(blob);
-                    
-                    const progress = ((i + 1) / anim.frameCount) * 90;
-                    dom.progressBar.style.width = `${progress}%`;
-                    
-                    await new Promise(resolve => setTimeout(resolve, 50));
-                }
-                
-                // 创建ZIP文件包含所有帧
-                dom.statusText.textContent = '正在打包图片序列...';
-                
-                if (typeof JSZip !== 'undefined') {
-                    const zip = new JSZip();
-                    
-                    // 添加每一帧到ZIP
-                    for (let i = 0; i < frameBlobs.length; i++) {
-                        zip.file(`frame_${i.toString().padStart(3, '0')}.png`, frameBlobs[i]);
-                    }
-                    
-                    // 添加说明文件
-                    const readmeContent = `动画帧序列
-动画名称: ${anim.name}
-播放速度: ${state.playSpeed}x (${frameDelay}ms/帧)
-帧数: ${anim.frameCount}
-生成时间: ${new Date().toLocaleString()}
-
-使用说明:
-1. 这些PNG图片按顺序播放即可重现动画效果
-2. 建议播放间隔: ${frameDelay}ms
-3. 可以使用GIF制作工具将这些图片合成为GIF`;
-                    
-                    zip.file('README.txt', readmeContent);
-                    
-                    // 生成ZIP
-                    const zipBlob = await zip.generateAsync({type: 'blob'});
-                    
-                    // 下载ZIP
-                    const fileName = `${anim.name.replace(/\s+/g, '_')}_动画帧序列_${state.playSpeed}x速度.zip`;
-                    downloadGif(zipBlob, fileName);
-                    
-                    dom.statusText.textContent = '图片序列下载成功！请使用GIF制作工具合成动画。';
-                    
-                } else {
-                    // 如果没有JSZip，只下载第一帧作为示例
-                    const fileName = `${anim.name.replace(/\s+/g, '_')}_示例帧.png`;
-                    downloadGif(frameBlobs[0], fileName);
-                    
-                    dom.statusText.textContent = '下载了示例帧图片，请手动制作GIF。';
-                }
-                
-                dom.progressBar.style.width = '100%';
-                setTimeout(resetSaveButton, 2000);
-                
-            } catch (error) {
-                console.error('备选方案失败:', error);
-                dom.statusText.textContent = '备选方案也失败了，请检查浏览器兼容性';
-                resetSaveButton();
-            }
-        }
-
-        // 辅助函数：检查GIF库是否正确加载
-        function checkGifJsLibrary() {
-            if (typeof gifshot !== 'undefined') {
-                console.log('gifshot库已加载');
-                return true;
-            } else {
-                console.error('gifshot库未加载');
-                dom.statusText.textContent = 'GIF库加载失败，将使用备选方案';
-                return false;
-            }
-        }
-        
-        // 辅助函数：创建安全的canvas上下文
-        function createSafeCanvas(width, height) {
-            const canvas = document.createElement('canvas');
-            canvas.width = width;
-            canvas.height = height;
-            return canvas.getContext('2d', { 
-                willReadFrequently: true,
-                alpha: false
-            });
-        }
         // 页面加载完成后初始化
         window.addEventListener('load', init);
     </script>
