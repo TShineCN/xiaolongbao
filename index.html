@@ -955,8 +955,9 @@
             canvas.width = 800;
             canvas.height = 800;
             
-            // 清空画布
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // 清空画布并设置黑色背景
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
             
             // 绘制背景帧 - 按原始大小居中显示
             if (anim.frameImages[frameIndex] && anim.frameImages[frameIndex].complete) {
@@ -969,10 +970,10 @@
                 // 按原始大小绘制背景图片
                 ctx.drawImage(img, x, y, img.naturalWidth, img.naturalHeight);
                 
-                console.log(`背景图片大小: ${img.naturalWidth}x${img.naturalHeight}, 位置: (${x}, ${y})`);
+                console.log(`预览帧${frameIndex}: 背景图片${img.naturalWidth}x${img.naturalHeight}，位置(${x}, ${y})`);
             } else {
                 // 如果图片未加载完成，显示占位背景
-                ctx.fillStyle = '#222';
+                ctx.fillStyle = '#333';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 ctx.fillStyle = '#fff';
                 ctx.font = 'bold 24px Arial';
@@ -981,10 +982,10 @@
             }
             
             // 如果用户上传了图片，则绘制
-            if (state.userImage && state.processedUserImage) {
+            if (state.userImage && state.processedUserImage && state.processedUserImage.complete) {
                 const pos = anim.overlayPositions[frameIndex];
                 
-                console.log(`绘制用户图片 - 帧${frameIndex}: 位置(${pos.x}, ${pos.y}), 旋转${pos.rotation}°, 缩放${pos.scale}`);
+                console.log(`预览帧${frameIndex}: 用户图片位置(${pos.x}, ${pos.y})，旋转${pos.rotation}°，缩放${pos.scale}`);
                 
                 ctx.save();
                 ctx.translate(pos.x, pos.y);
@@ -1008,7 +1009,7 @@
                 dom.framePositionInfo.textContent = 
                     `当前帧位置: (${pos.x}, ${pos.y}) 旋转: ${pos.rotation}°`;
             } else {
-                console.log('用户图片未准备好:', !!state.userImage, !!state.processedUserImage);
+                console.log(`预览帧${frameIndex}: 用户图片未准备好:`, !!state.userImage, !!state.processedUserImage);
             }
         }
 
@@ -1102,18 +1103,10 @@
             return downloadFile(blob, fileName, 'PNG图片');
         }
         
-        // 获取背景图片尺寸的通用函数
+        // 获取背景图片尺寸的通用函数 - 固定返回800x800以保持一致性
         function getBackgroundDimensions(animationId) {
-            const anim = config.animations[animationId || state.currentAnimation];
-            let canvasWidth = 800;
-            let canvasHeight = 800;
-            
-            if (anim.frameImages[0] && anim.frameImages[0].complete) {
-                canvasWidth = anim.frameImages[0].naturalWidth;
-                canvasHeight = anim.frameImages[0].naturalHeight;
-            }
-            
-            return { width: canvasWidth, height: canvasHeight };
+            // 统一使用800x800尺寸，与预览画布和合成画布保持一致
+            return { width: 800, height: 800 };
         }
         
         // 更新状态文本和进度的通用函数
@@ -1258,52 +1251,76 @@
         async function createCompositeFrame(frameIndex, canvasWidth, canvasHeight) {
             const anim = config.animations[state.currentAnimation];
             
-            // 创建合成canvas，使用背景图片的原始尺寸
+            // 创建合成canvas，使用固定的800x800尺寸确保一致性
             const compositeCanvas = document.createElement('canvas');
-            compositeCanvas.width = canvasWidth;
-            compositeCanvas.height = canvasHeight;
+            compositeCanvas.width = 800;
+            compositeCanvas.height = 800;
             const ctx = compositeCanvas.getContext('2d');
             
-            // 绘制背景图片
+            // 清空画布并设置黑色背景
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, 800, 800);
+            
+            // 绘制背景图片 - 按原始尺寸居中显示
             if (anim.frameImages[frameIndex] && anim.frameImages[frameIndex].complete) {
                 const bgImg = anim.frameImages[frameIndex];
-                ctx.drawImage(bgImg, 0, 0, canvasWidth, canvasHeight);
+                
+                // 计算背景图片在800x800画布中的居中位置
+                const bgX = (800 - bgImg.naturalWidth) / 2;
+                const bgY = (800 - bgImg.naturalHeight) / 2;
+                
+                // 按原始大小绘制背景图片
+                ctx.drawImage(bgImg, bgX, bgY, bgImg.naturalWidth, bgImg.naturalHeight);
+                
+                console.log(`合成帧${frameIndex}: 背景图片${bgImg.naturalWidth}x${bgImg.naturalHeight}，位置(${bgX}, ${bgY})`);
             } else {
-                // 如果背景图片未加载，使用黑色背景
-                ctx.fillStyle = '#000';
-                ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+                console.warn(`合成帧${frameIndex}: 背景图片未加载完成`);
+                // 绘制占位符
+                ctx.fillStyle = '#333';
+                ctx.fillRect(0, 0, 800, 800);
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 24px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(`帧 ${frameIndex + 1} 加载中...`, 400, 400);
             }
             
-            // 绘制用户图片
-            if (state.processedUserImage) {
+            // 绘制用户图片 - 使用预览区域相同的坐标系统
+            if (state.processedUserImage && state.processedUserImage.complete) {
                 const pos = anim.overlayPositions[frameIndex];
                 
-                // 计算背景图片在800x800canvas中的偏移量
-                const bgOffsetX = (800 - canvasWidth) / 2;
-                const bgOffsetY = (800 - canvasHeight) / 2;
+                console.log(`合成帧${frameIndex}: 用户图片位置(${pos.x}, ${pos.y})，旋转${pos.rotation}°，缩放${pos.scale}`);
                 
-                // 计算用户图片相对于背景图片的位置
-                const relativeX = pos.x - bgOffsetX;
-                const relativeY = pos.y - bgOffsetY;
+                ctx.save();
+                ctx.translate(pos.x, pos.y);
+                ctx.rotate(pos.rotation * Math.PI / 180);
                 
-                // 确保用户图片位置在背景图片范围内
-                if (relativeX >= 0 && relativeX <= canvasWidth && relativeY >= 0 && relativeY <= canvasHeight) {
-                    ctx.save();
-                    ctx.translate(relativeX, relativeY);
-                    ctx.rotate(pos.rotation * Math.PI / 180);
-                    
-                    const imgWidth = state.processedUserImage.width * pos.scale;
-                    const imgHeight = state.processedUserImage.height * pos.scale;
-                    
-                    ctx.drawImage(
-                        state.processedUserImage,
-                        -imgWidth/2,
-                        -imgHeight/2,
-                        imgWidth,
-                        imgHeight
-                    );
-                    ctx.restore();
-                }
+                const imgWidth = state.processedUserImage.width * pos.scale;
+                const imgHeight = state.processedUserImage.height * pos.scale;
+                
+                ctx.drawImage(
+                    state.processedUserImage,
+                    -imgWidth/2,
+                    -imgHeight/2,
+                    imgWidth,
+                    imgHeight
+                );
+                
+                ctx.restore();
+            } else {
+                console.log(`合成帧${frameIndex}: 用户图片未准备好`);
+            }
+            
+            // 验证合成结果
+            const imageData = ctx.getImageData(0, 0, 800, 800);
+            const hasContent = imageData.data.some((value, index) => {
+                // 检查是否有非黑色像素（忽略alpha通道）
+                return index % 4 !== 3 && value > 0;
+            });
+            
+            if (!hasContent) {
+                console.warn(`合成帧${frameIndex}: 画布内容可能为空`);
+            } else {
+                console.log(`合成帧${frameIndex}: 画布内容验证通过`);
             }
             
             return compositeCanvas;
