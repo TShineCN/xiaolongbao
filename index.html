@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>动态图组合成工具</title>
-    <!-- 引入gif.js库 -->
-    <script src="gif.js"></script>
-    <!-- 引入gifshot库 - 优先使用的高质量GIF导出库 -->
+    <!-- 引入gifshot库 - 高质量GIF导出 -->
     <script src="https://cdn.jsdelivr.net/npm/gifshot@0.4.5/dist/gifshot.min.js"></script>
     <style>
         * {
@@ -512,34 +510,11 @@
                     <span>10x (快)</span>
                 </div>
                 
-                <div class="speed-display" id="qualityDisplay" style="margin-top: 15px;">最高品质 (无噪点)</div>
-                <input type="range" class="speed-slider" id="qualitySlider" 
-                       min="1" max="30" step="1" value="1">
-                <div class="speed-info">
-                    <span>最高品质</span>
-                    <span>最低品质</span>
-                </div>
-                
-                <div class="speed-display" style="margin-top: 15px;">抖动算法: <span id="ditherDisplay">Atkinson</span></div>
-                <select class="speed-slider" id="ditherSelect" style="width: 100%; padding: 8px; border-radius: 4px; background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.3);">
-                    <option value="false">无抖动 (可能有色带)</option>
-                    <option value="FloydSteinberg">Floyd-Steinberg</option>
-                    <option value="FloydSteinberg-serpentine">Floyd-Steinberg 蛇形</option>
-                    <option value="Atkinson" selected>Atkinson (最佳噪点控制)</option>
-                    <option value="Atkinson-serpentine">Atkinson 蛇形</option>
-                    <option value="Stucki">Stucki</option>
-                    <option value="Stucki-serpentine">Stucki 蛇形</option>
-                    <option value="FalseFloydSteinberg">False Floyd-Steinberg (快速)</option>
-                </select>
             </div>
             
             <div class="action-buttons" style="margin-top: 5px;">
                 <button class="action-btn play-btn" id="testBtn">测试合成图片</button>
-                <button class="action-btn save-btn" id="saveBtn">保存高质量GIF</button>
-            </div>
-            
-            <div class="action-buttons" style="margin-top: 10px;">
-                <button class="action-btn" id="testGifshotBtn" style="background: linear-gradient(to right, #667eea, #764ba2); font-size: 12px; padding: 10px;">测试gifshot库</button>
+                <button class="action-btn save-btn" id="saveBtn">保存为GIF</button>
             </div>
             
             <div class="status-text" id="statusText">准备好创建您的动画！</div>
@@ -744,11 +719,7 @@
             currentFrame: 0,
             frameInterval: null,
             composedFrames: {},
-            playSpeed: 1.0, // 播放速度倍数，1.0 = 200ms/帧
-            gifQuality: 1, // GIF品质 (1-30, 数字越小品质越高)
-            ditherMethod: 'Atkinson', // 抖动算法 - 减少噪点的最佳选择
-            gif: null, // gif.js实例
-            forceGifshot: true // 强制使用gifshot库
+            playSpeed: 1.0 // 播放速度倍数，1.0 = 200ms/帧
         };
 
         // 初始化函数
@@ -756,39 +727,18 @@
             // 添加这一行解决跨域问题
             dom.ctx = dom.canvas.getContext('2d', { willReadFrequently: true });
             
-            // 初始化库检测和状态输出
-            console.log('=== 初始化GIF库检测 ===');
-            console.log('强制使用gifshot模式:', state.forceGifshot);
-            
-            // 详细检测gifshot库
-            console.log('gifshot检测:');
-            console.log('  - typeof gifshot:', typeof gifshot);
-            console.log('  - gifshot对象:', gifshot);
-            console.log('  - gifshot.createGIF存在:', !!(gifshot && gifshot.createGIF));
+            // 初始化gifshot库检测
+            console.log('初始化gifshot库...');
             
             if (typeof gifshot !== 'undefined' && gifshot && gifshot.createGIF) {
-                console.log('✓ gifshot库加载成功 (优先使用高质量导出)');
-                console.log('  版本:', gifshot.VERSION || '未知');
+                console.log('✓ gifshot库加载成功');
             } else {
-                console.warn('✗ gifshot库状态异常，稍后将尝试动态加载');
+                console.warn('✗ gifshot库未就绪，将在导出时动态加载');
             }
-            
-            // 检测gif.js库
-            console.log('gif.js检测:');
-            console.log('  - typeof GIF:', typeof GIF);
-            if (typeof GIF !== 'undefined') {
-                console.log('✓ gif.js库加载成功 (备选方案)');
-            } else {
-                console.error('✗ gif.js库加载失败');
-            }
-            
-            console.log('=== 库检测完成 ===');
             
             setupButtons();
             setupEventListeners();
             setupSpeedControl();
-            setupQualityControl();
-            setupDitherControl();
             preloadFrameImages();
             renderFrame(0);
             // 自动开始播放动画
@@ -940,56 +890,6 @@
             });
         }
 
-        // 设置品质控制
-        function setupQualityControl() {
-            const qualitySlider = document.getElementById('qualitySlider');
-            const qualityDisplay = document.getElementById('qualityDisplay');
-            
-            qualitySlider.addEventListener('input', (e) => {
-                const quality = parseInt(e.target.value);
-                state.gifQuality = quality;
-                
-                // 更新显示
-                let qualityText;
-                if (quality <= 3) {
-                    qualityText = '最高品质';
-                } else if (quality <= 10) {
-                    qualityText = '高品质';
-                } else if (quality <= 20) {
-                    qualityText = '中品质';
-                } else {
-                    qualityText = '低品质';
-                }
-                
-                qualityDisplay.textContent = `${qualityText} (品质值: ${quality})`;
-                
-                console.log(`GIF品质调整为: ${quality}, 描述: ${qualityText}`);
-            });
-            
-            // 初始化显示
-            const initialQuality = parseInt(qualitySlider.value);
-            state.gifQuality = initialQuality;
-            qualityDisplay.textContent = '最高品质 (品质值: ' + initialQuality + ')';
-        }
-        
-        // 设置抖动算法控制
-        function setupDitherControl() {
-            const ditherSelect = document.getElementById('ditherSelect');
-            const ditherDisplay = document.getElementById('ditherDisplay');
-            
-            ditherSelect.addEventListener('change', (e) => {
-                const method = e.target.value;
-                state.ditherMethod = method === 'false' ? false : method;
-                
-                ditherDisplay.textContent = method === 'false' ? '无抖动' : method;
-                
-                console.log(`抖动算法调整为: ${method}`);
-            });
-            
-            // 初始化显示
-            state.ditherMethod = ditherSelect.value;
-            ditherDisplay.textContent = ditherSelect.value;
-        }
 
         // 设置事件监听器
         function setupEventListeners() {
@@ -1004,9 +904,6 @@
             
             // 保存按钮事件
             dom.saveBtn.addEventListener('click', saveAsGif);
-            
-            // 测试gifshot库按钮事件
-            document.getElementById('testGifshotBtn').addEventListener('click', testGifshotLibrary);
             
             // 允许拖放上传
             dom.uploadArea.addEventListener('dragover', (e) => {
@@ -1276,14 +1173,14 @@
             }
         }
         
-        // 使用gifshot库优先导出GIF（最高质量）
+        // 使用gifshot库导出GIF
         async function saveAsGif() {
             if (!state.userImage || !state.userImage.complete) {
                 updateProgress('请先上传图片！');
                 return;
             }
             
-            updateProgress('正在生成高质量GIF...', 0);
+            updateProgress('正在生成GIF...', 0);
             dom.saveBtn.disabled = true;
             dom.testBtn.disabled = true;
             dom.progressContainer.style.display = 'block';
@@ -1294,59 +1191,28 @@
                 
                 // 生成所有帧的canvas数组
                 const frameCanvases = [];
-                
                 for (let i = 0; i < anim.frameCount; i++) {
                     updateProgress(`正在处理第 ${i + 1}/${anim.frameCount} 帧...`, ((i + 1) / anim.frameCount) * 20);
-                    
                     const frameCanvas = await createCompositeFrame(i, canvasWidth, canvasHeight);
                     frameCanvases.push(frameCanvas);
-                    
                     await new Promise(resolve => setTimeout(resolve, 30));
                 }
                 
                 console.log(`准备生成GIF: ${frameCanvases.length}帧, 尺寸: ${canvasWidth}x${canvasHeight}`);
                 
-                // 强制使用gifshot库进行高质量导出
-                console.log('强制使用gifshot模式:', state.forceGifshot);
-                console.log('检查gifshot库状态:', typeof gifshot, gifshot);
-                
-                if (state.forceGifshot) {
-                    // 强制模式：必须使用gifshot
-                    if (typeof gifshot !== 'undefined' && gifshot && gifshot.createGIF) {
-                        console.log('✓ 使用gifshot库进行高质量导出');
-                        await saveWithGifshot(frameCanvases, anim, canvasWidth, canvasHeight);
-                    } else {
-                        console.error('✗ gifshot库不可用，尝试重新加载...');
-                        updateProgress('gifshot库未就绪，正在重新加载...', 25);
-                        
-                        // 强制重新加载gifshot库
-                        const gifshotLoaded = await loadGifshotLibrary();
-                        if (gifshotLoaded) {
-                            console.log('✓ 重新加载gifshot成功，开始高质量导出');
-                            await saveWithGifshot(frameCanvases, anim, canvasWidth, canvasHeight);
-                        } else {
-                            // 即使在强制模式下，如果无法加载gifshot，也要给用户一个选择
-                            updateProgress('无法加载gifshot库，是否继续使用gif.js？', 30);
-                            const useGifJS = confirm('无法加载gifshot高质量库，是否使用gif.js继续导出？');
-                            if (useGifJS) {
-                                console.warn('用户选择使用gif.js继续导出');
-                                await saveWithGifJS(frameCanvases, anim, canvasWidth, canvasHeight);
-                            } else {
-                                updateProgress('导出已取消');
-                                resetSaveButton();
-                                return;
-                            }
-                        }
-                    }
+                // 检查并使用gifshot库
+                if (typeof gifshot !== 'undefined' && gifshot && gifshot.createGIF) {
+                    await saveWithGifshot(frameCanvases, anim, canvasWidth, canvasHeight);
                 } else {
-                    // 非强制模式：优先gifshot，失败则降级
-                    if (typeof gifshot !== 'undefined' && gifshot && gifshot.createGIF) {
-                        console.log('✓ 使用gifshot库进行高质量导出');
+                    console.warn('gifshot库未加载，尝试动态加载...');
+                    updateProgress('正在加载GIF导出库...', 25);
+                    
+                    const gifshotLoaded = await loadGifshotLibrary();
+                    if (gifshotLoaded) {
                         await saveWithGifshot(frameCanvases, anim, canvasWidth, canvasHeight);
                     } else {
-                        console.warn('✗ 无法使用gifshot，降级到gif.js');
-                        updateProgress('降级到gif.js导出...', 30);
-                        await saveWithGifJS(frameCanvases, anim, canvasWidth, canvasHeight);
+                        updateProgress('GIF导出库加载失败，请检查网络连接');
+                        resetSaveButton();
                     }
                 }
                 
@@ -1377,7 +1243,7 @@
                 
                 const frameDelay = Math.round(200 / state.playSpeed) / 1000; // gifshot使用秒为单位
                 
-                // gifshot最高质量配置
+                // gifshot高质量配置
                 const gifshotOptions = {
                     images: frameImages,
                     gifWidth: canvasWidth,
@@ -1387,24 +1253,12 @@
                     frameDuration: frameDelay,
                     sampleInterval: 1, // 最高质量采样
                     numWorkers: Math.min(navigator.hardwareConcurrency || 2, 4),
-                    // 最高质量设置
-                    quality: 'high', // 使用高质量
+                    quality: 'high', // 高质量
                     repeat: 0, // 无限循环
                     progressCallback: function(captureProgress) {
                         const progress = 60 + (captureProgress * 35);
                         updateProgress(`生成中... ${Math.round(progress)}%`, progress);
-                    },
-                    completeCallback: function() {
-                        console.log('gifshot处理完成');
-                    },
-                    // 高级质量选项
-                    waterMark: false,
-                    waterMarkHeight: 0,
-                    waterMarkWidth: 0,
-                    // 减少颜色量化损失
-                    quantizationMethod: 'neuQuant', // 使用神经网络量化算法
-                    transparentPixelFilter: false,
-                    fontWeight: 'normal'
+                    }
                 };
                 
                 console.log('gifshot配置:', gifshotOptions);
@@ -1412,16 +1266,15 @@
                 // 使用gifshot生成GIF
                 gifshot.createGIF(gifshotOptions, function(obj) {
                     if (!obj.error) {
-                        // 成功生成
                         const gifBlob = dataURLToBlob(obj.image);
-                        const fileName = `${anim.name.replace(/\s+/g, '_')}_高质量动画_${state.playSpeed}x速度.gif`;
+                        const fileName = `${anim.name.replace(/\s+/g, '_')}_动画_${state.playSpeed}x速度.gif`;
                         
-                        console.log(`gifshot成功生成GIF: ${(gifBlob.size/1024).toFixed(1)}KB`);
+                        console.log(`GIF生成成功: ${(gifBlob.size/1024).toFixed(1)}KB`);
                         
                         const success = downloadFile(gifBlob, fileName, 'GIF动画');
                         
                         if (success) {
-                            updateProgress('高质量GIF保存成功！', 100);
+                            updateProgress('GIF保存成功！', 100);
                             console.log(`GIF下载成功: ${fileName}, 大小: ${(gifBlob.size / 1024 / 1024).toFixed(2)}MB`);
                         } else {
                             updateProgress('下载失败，请重试');
@@ -1429,162 +1282,20 @@
                         
                         setTimeout(resetSaveButton, 2000);
                     } else {
-                        console.error('gifshot生成失败:', obj.error);
-                        // 降级到gif.js
-                        console.log('降级到gif.js备选方案...');
-                        saveWithGifJS(frameCanvases, anim, canvasWidth, canvasHeight);
+                        console.error('GIF生成失败:', obj.error);
+                        updateProgress('GIF生成失败: ' + obj.error);
+                        resetSaveButton();
                     }
                 });
                 
             } catch (error) {
                 console.error('gifshot处理失败:', error);
-                // 降级到gif.js
-                console.log('降级到gif.js备选方案...');
-                await saveWithGifJS(frameCanvases, anim, canvasWidth, canvasHeight);
+                updateProgress('GIF生成失败: ' + error.message);
+                resetSaveButton();
             }
         }
         
-        // gif.js备选方案（保持原有逻辑）
-        async function saveWithGifJS(frameCanvases, anim, canvasWidth, canvasHeight) {
-            updateProgress('正在使用gif.js生成GIF文件...', 40);
-            
-            const frameDelay = Math.round(200 / state.playSpeed);
-            
-            // 智能配置优化
-            const optimalConfig = getOptimalGifConfig(frameCanvases, canvasWidth, canvasHeight);
-            console.log(`gif.js智能配置:`, optimalConfig);
-            
-            // 创建gif.js实例
-            const gif = new GIF({
-                workers: Math.min(navigator.hardwareConcurrency || 2, 4),
-                quality: optimalConfig.quality,
-                width: canvasWidth,
-                height: canvasHeight,
-                repeat: 0,
-                transparent: null,
-                background: '#000000',
-                dither: optimalConfig.dither,
-                globalPalette: optimalConfig.globalPalette,
-                debug: false,
-                workerScript: './gif.js/gif.worker.js',
-                optimizeCb: true,
-                sample: 10
-            });
-            
-            // 设置进度回调
-            gif.on('progress', function(p) {
-                const progress = 40 + (p * 50);
-                updateProgress(`生成GIF中... ${Math.round(progress)}%`, progress);
-            });
-            
-            // 设置完成回调
-            gif.on('finished', function(blob) {
-                console.log(`gif.js成功生成GIF: ${(blob.size/1024).toFixed(1)}KB`);
-                
-                const fileName = `${anim.name.replace(/\s+/g, '_')}_动画_${state.playSpeed}x速度.gif`;
-                const success = downloadFile(blob, fileName, 'GIF动画');
-                
-                if (success) {
-                    updateProgress('GIF保存成功！', 100);
-                    console.log(`GIF下载成功: ${fileName}, 大小: ${(blob.size / 1024 / 1024).toFixed(2)}MB`);
-                } else {
-                    updateProgress('下载失败，请重试');
-                }
-                
-                setTimeout(resetSaveButton, 2000);
-            });
-            
-            // 设置错误回调
-            gif.on('error', function(error) {
-                console.error('gif.js生成失败:', error);
-                updateProgress('GIF生成失败，正在下载图片序列...');
-                downloadFrameSequence(frameCanvases, anim.name);
-            });
-            
-            // 批量添加帧
-            await addFramesBatch(gif, frameCanvases, frameDelay);
-            
-            // 开始渲染
-            console.log('开始gif.js渲染...');
-            gif.render();
-        }
         
-        // 测试gifshot库功能
-        async function testGifshotLibrary() {
-            console.log('=== 测试gifshot库功能 ===');
-            updateProgress('正在测试gifshot库...', 0);
-            
-            try {
-                // 第一步：检查库是否存在
-                console.log('1. 检查gifshot库状态:');
-                console.log('   typeof gifshot:', typeof gifshot);
-                console.log('   gifshot:', gifshot);
-                console.log('   gifshot.createGIF存在:', !!(gifshot && gifshot.createGIF));
-                
-                if (typeof gifshot === 'undefined' || !gifshot || !gifshot.createGIF) {
-                    console.log('2. gifshot库不可用，尝试动态加载...');
-                    updateProgress('gifshot库不可用，尝试重新加载...', 25);
-                    
-                    const loaded = await loadGifshotLibrary();
-                    if (!loaded) {
-                        updateProgress('❌ gifshot库加载失败');
-                        return;
-                    }
-                }
-                
-                console.log('3. 测试创建简单GIF...');
-                updateProgress('测试创建简单GIF...', 50);
-                
-                // 创建一个简单的测试图片
-                const testCanvas = document.createElement('canvas');
-                testCanvas.width = 100;
-                testCanvas.height = 100;
-                const ctx = testCanvas.getContext('2d');
-                
-                // 绘制测试图片
-                ctx.fillStyle = '#ff0000';
-                ctx.fillRect(0, 0, 100, 100);
-                ctx.fillStyle = '#ffffff';
-                ctx.font = '20px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText('TEST', 50, 55);
-                
-                const testImage = testCanvas.toDataURL();
-                
-                // 使用gifshot创建测试GIF
-                gifshot.createGIF({
-                    images: [testImage, testImage],
-                    gifWidth: 100,
-                    gifHeight: 100,
-                    interval: 0.5,
-                    numFrames: 2,
-                    quality: 'high',
-                    sampleInterval: 1,
-                    numWorkers: 1
-                }, function(obj) {
-                    if (!obj.error) {
-                        console.log('✓ gifshot库测试成功！');
-                        console.log('   生成的GIF大小:', obj.image.length, '字符');
-                        updateProgress('✅ gifshot库测试成功！可以正常使用', 100);
-                        
-                        // 下载测试GIF
-                        const testBlob = dataURLToBlob(obj.image);
-                        downloadFile(testBlob, 'gifshot_test.gif', 'GIF测试文件');
-                        
-                        setTimeout(() => {
-                            updateProgress('gifshot库测试完成，可以正常导出高质量GIF');
-                        }, 2000);
-                    } else {
-                        console.error('✗ gifshot库测试失败:', obj.error);
-                        updateProgress('❌ gifshot库测试失败: ' + obj.error);
-                    }
-                });
-                
-            } catch (error) {
-                console.error('测试gifshot库时发生错误:', error);
-                updateProgress('❌ 测试失败: ' + error.message);
-            }
-        }
         
         // 动态加载gifshot库
         function loadGifshotLibrary() {
@@ -1642,269 +1353,58 @@
             return new Blob([ab], { type: mimeString });
         }
         
-        // 创建合成帧 - 基于petpet-js的最佳实践
+        // 创建合成帧
         async function createCompositeFrame(frameIndex, canvasWidth, canvasHeight) {
             const anim = config.animations[state.currentAnimation];
             
-            // 创建独立的离屏canvas，避免DOM干扰
+            // 创建离屏canvas
             const compositeCanvas = document.createElement('canvas');
             compositeCanvas.width = canvasWidth;
             compositeCanvas.height = canvasHeight;
             const ctx = compositeCanvas.getContext('2d', { 
-                alpha: false, // 禁用透明度通道
-                willReadFrequently: false,
-                desynchronized: true // 提高性能
+                alpha: false,
+                willReadFrequently: false
             });
             
-            // petpet-js风格：确保画布完全清洁
-            ctx.save();
-            ctx.setTransform(1, 0, 0, 1, 0, 0); // 重置变换矩阵
-            ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-            
-            // 设置一致的黑色背景，避免透明度问题
+            // 清空画布并设置黑色背景
             ctx.fillStyle = '#000000';
             ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-            ctx.restore();
-            
-            // 优化渲染质量设置 - 减少失真和噪点
-            ctx.imageSmoothingEnabled = true;
-            ctx.imageSmoothingQuality = 'high';
-            ctx.textRenderingOptimization = 'optimizeQuality';
             
             // 启用高质量渲染
-            if (ctx.webkitImageSmoothingEnabled !== undefined) {
-                ctx.webkitImageSmoothingEnabled = true;
-            }
-            if (ctx.mozImageSmoothingEnabled !== undefined) {
-                ctx.mozImageSmoothingEnabled = true;
-            }
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
             
-            // 绘制背景图片 - 确保像素完美对齐
+            // 绘制背景图片
             if (anim.frameImages[frameIndex] && anim.frameImages[frameIndex].complete) {
-                const bgImg = anim.frameImages[frameIndex];
-                
-                ctx.save();
-                // 使用整数坐标避免亚像素渲染
-                ctx.drawImage(bgImg, 0, 0, canvasWidth, canvasHeight);
-                ctx.restore();
+                ctx.drawImage(anim.frameImages[frameIndex], 0, 0, canvasWidth, canvasHeight);
             }
             
-            // 绘制用户图片 - petpet-js风格的精确定位
+            // 绘制用户图片
             if (state.processedUserImage && state.processedUserImage.complete) {
                 const pos = anim.overlayPositions[frameIndex];
                 
                 ctx.save();
-                
-                // 使用整数坐标避免模糊
-                const exactX = Math.round(pos.x);
-                const exactY = Math.round(pos.y);
-                const exactWidth = Math.round(state.processedUserImage.width * pos.scale);
-                const exactHeight = Math.round(state.processedUserImage.height * pos.scale);
-                
-                ctx.translate(exactX, exactY);
+                ctx.translate(pos.x, pos.y);
                 ctx.rotate(pos.rotation * Math.PI / 180);
                 
-                // 精确绘制，避免亚像素问题
+                const imgWidth = state.processedUserImage.width * pos.scale;
+                const imgHeight = state.processedUserImage.height * pos.scale;
+                
                 ctx.drawImage(
                     state.processedUserImage,
-                    Math.round(-exactWidth/2),
-                    Math.round(-exactHeight/2),
-                    exactWidth,
-                    exactHeight
+                    -imgWidth/2,
+                    -imgHeight/2,
+                    imgWidth,
+                    imgHeight
                 );
                 
                 ctx.restore();
-                
-                console.log(`精确帧${frameIndex}: 位置(${exactX}, ${exactY}), 尺寸${exactWidth}x${exactHeight}`);
             }
-            
-            // 强制渲染完成，确保数据一致性
-            ctx.getImageData(0, 0, 1, 1); // 触发渲染完成
             
             return compositeCanvas;
         }
         
         
-        // 下载帧序列
-        async function downloadFrameSequence(frameCanvases, animName) {
-            for (let i = 0; i < frameCanvases.length; i++) {
-                const canvas = frameCanvases[i];
-                const blob = await new Promise(resolve => {
-                    canvas.toBlob(resolve, 'image/png', 1.0);
-                });
-                
-                const fileName = `${animName.replace(/\s+/g, '_')}_frame_${i}.png`;
-                downloadFile(blob, fileName, 'PNG图片');
-                
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
-            
-            updateProgress('图片序列下载完成！请使用其他工具制作GIF', 100);
-            setTimeout(resetSaveButton, 3000);
-        }
-        
-        // petpet-js风格：智能GIF配置优化
-        function getOptimalGifConfig(frameCanvases, width, height) {
-            // 分析第一帧的颜色复杂度
-            const sampleCanvas = frameCanvases[0];
-            const ctx = sampleCanvas.getContext('2d');
-            const imageData = ctx.getImageData(0, 0, Math.min(width, 100), Math.min(height, 100));
-            const colorComplexity = analyzeColorComplexity(imageData);
-            
-            console.log(`颜色复杂度分析: ${colorComplexity.type}, 唯一颜色: ${colorComplexity.uniqueColors}`);
-            
-            // 基于内容类型智能选择配置
-            let config = {
-                quality: state.gifQuality,
-                dither: state.ditherMethod,
-                globalPalette: true
-            };
-            
-            // 内容自适应优化 - 针对噪点和失真进行优化
-            if (colorComplexity.type === 'simple') {
-                // 简单图形：禁用抖动减少噪点，使用局部调色板
-                config.dither = false;
-                config.globalPalette = false;
-                config.quality = Math.min(state.gifQuality, 3); // 提高质量
-            } else if (colorComplexity.type === 'gradient') {
-                // 渐变图形：使用Atkinson抖动减少噪点
-                config.dither = 'Atkinson';
-                config.globalPalette = true;
-                config.quality = Math.min(state.gifQuality, 5);
-            } else if (colorComplexity.type === 'photo') {
-                // 照片类：使用最少噪点的抖动算法
-                config.dither = 'Atkinson';
-                config.globalPalette = true;
-                config.quality = Math.min(state.gifQuality, 2); // 更高质量
-            }
-            
-            // 如果用户手动选择了抖动方法，优先使用用户选择
-            if (state.ditherMethod !== 'Atkinson') {
-                config.dither = state.ditherMethod;
-            }
-            
-            return config;
-        }
-        
-        // 分析图像颜色复杂度
-        function analyzeColorComplexity(imageData) {
-            const pixels = imageData.data;
-            const colorSet = new Set();
-            let gradientScore = 0;
-            
-            // 采样分析（提高性能）
-            for (let i = 0; i < pixels.length; i += 16) { // 每4个像素采样一次
-                const r = pixels[i];
-                const g = pixels[i + 1];
-                const b = pixels[i + 2];
-                const color = (r << 16) | (g << 8) | b;
-                colorSet.add(color);
-                
-                // 检测渐变（相邻像素颜色差异）
-                if (i > 16) {
-                    const prevR = pixels[i - 16];
-                    const prevG = pixels[i - 15];
-                    const prevB = pixels[i - 14];
-                    const colorDiff = Math.abs(r - prevR) + Math.abs(g - prevG) + Math.abs(b - prevB);
-                    if (colorDiff > 10 && colorDiff < 100) {
-                        gradientScore++;
-                    }
-                }
-            }
-            
-            const uniqueColors = colorSet.size;
-            const gradientRatio = gradientScore / (pixels.length / 16);
-            
-            // 分类内容类型
-            let type;
-            if (uniqueColors < 64 && gradientRatio < 0.1) {
-                type = 'simple'; // 简单平面图形
-            } else if (gradientRatio > 0.3) {
-                type = 'gradient'; // 包含渐变
-            } else {
-                type = 'photo'; // 照片或复杂图形
-            }
-            
-            return {
-                type,
-                uniqueColors,
-                gradientRatio: Math.round(gradientRatio * 100) / 100
-            };
-        }
-        
-        // petpet-js风格：批量添加帧，优化性能和质量
-        async function addFramesBatch(gif, frameCanvases, frameDelay) {
-            const batchSize = 3; // 每批处理3帧，避免内存压力
-            let lastFrameHash = null;
-            
-            for (let i = 0; i < frameCanvases.length; i += batchSize) {
-                const batch = frameCanvases.slice(i, i + batchSize);
-                
-                for (let j = 0; j < batch.length; j++) {
-                    const canvas = batch[j];
-                    const frameIndex = i + j;
-                    
-                    // 创建完全独立的canvas副本
-                    const independentCanvas = createIndependentFrame(canvas);
-                    
-                    // petpet-js风格：帧去重优化（可选）
-                    const frameHash = getFrameHash(independentCanvas);
-                    if (frameHash !== lastFrameHash) {
-                        gif.addFrame(independentCanvas, { 
-                            delay: frameDelay,
-                            copy: true,
-                            dispose: 2 // 重要：确保帧间不互相影响
-                        });
-                        lastFrameHash = frameHash;
-                        console.log(`添加唯一帧 ${frameIndex + 1}/${frameCanvases.length}`);
-                    } else {
-                        console.log(`跳过重复帧 ${frameIndex + 1}`);
-                    }
-                }
-                
-                // 批间延迟，让浏览器有时间处理其他任务
-                if (i + batchSize < frameCanvases.length) {
-                    await new Promise(resolve => setTimeout(resolve, 10));
-                }
-            }
-        }
-        
-        // 创建完全独立的帧副本
-        function createIndependentFrame(sourceCanvas) {
-            const independentCanvas = document.createElement('canvas');
-            independentCanvas.width = sourceCanvas.width;
-            independentCanvas.height = sourceCanvas.height;
-            
-            const ctx = independentCanvas.getContext('2d', { 
-                alpha: false,
-                willReadFrequently: false 
-            });
-            
-            // 确保完全清洁的背景
-            ctx.fillStyle = '#000000';
-            ctx.fillRect(0, 0, independentCanvas.width, independentCanvas.height);
-            
-            // 精确复制源画布
-            ctx.drawImage(sourceCanvas, 0, 0);
-            
-            // 强制完成渲染
-            ctx.getImageData(0, 0, 1, 1);
-            
-            return independentCanvas;
-        }
-        
-        // 简单的帧哈希，用于去重
-        function getFrameHash(canvas) {
-            const ctx = canvas.getContext('2d');
-            // 采样关键像素点生成简单哈希
-            const samples = [
-                ctx.getImageData(0, 0, 1, 1).data,
-                ctx.getImageData(canvas.width/2, canvas.height/2, 1, 1).data,
-                ctx.getImageData(canvas.width-1, canvas.height-1, 1, 1).data
-            ];
-            
-            return samples.map(s => `${s[0]}-${s[1]}-${s[2]}`).join('|');
-        }
         
         // 重置保存按钮状态
         function resetSaveButton() {
