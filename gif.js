@@ -327,15 +327,20 @@
     var nPix = len / 3;
     this.indexedPixels = new Array(nPix);
     
-    // Simple quantization - convert to 256 colors
+    // 改进的颜色量化 - 使用更高精度
     var colorTab = [];
     var colorMap = {};
     var colorIndex = 0;
     
+    // 使用更高的颜色精度减少噪点
+    var colorBits = this.sample < 5 ? 6 : 5; // 高品质时使用6位，否则5位
+    var colorMask = 0xFF << (8 - colorBits);
+    var colorShift = 8 - colorBits;
+    
     for (var i = 0; i < len; i += 3) {
-      var r = this.pixels[i] & 0xf8;     // 5 bits
-      var g = this.pixels[i + 1] & 0xf8; // 5 bits  
-      var b = this.pixels[i + 2] & 0xf8; // 5 bits
+      var r = this.pixels[i] & colorMask;
+      var g = this.pixels[i + 1] & colorMask;
+      var b = this.pixels[i + 2] & colorMask;
       
       var color = (r << 16) | (g << 8) | b;
       var index = colorMap[color];
@@ -346,8 +351,8 @@
           colorMap[color] = colorIndex;
           index = colorIndex++;
         } else {
-          // Find closest color
-          index = this.findClosest(r, g, b, colorTab);
+          // 使用更精确的颜色匹配
+          index = this.findClosestImproved(r, g, b, colorTab);
         }
       }
       
@@ -371,6 +376,28 @@
       var dg = g - colorTab[i + 1];
       var db = b - colorTab[i + 2];
       var dist = dr * dr + dg * dg + db * db;
+      
+      if (dist < minDist) {
+        minDist = dist;
+        closest = i / 3;
+      }
+    }
+    
+    return closest;
+  };
+
+  // 改进的颜色匹配算法 - 考虑人眼对颜色的敏感度
+  GIFEncoder.prototype.findClosestImproved = function(r, g, b, colorTab) {
+    var minDist = Number.MAX_VALUE;
+    var closest = 0;
+    
+    for (var i = 0; i < colorTab.length; i += 3) {
+      var dr = r - colorTab[i];
+      var dg = g - colorTab[i + 1];
+      var db = b - colorTab[i + 2];
+      
+      // 使用加权欧几里得距离，考虑人眼对绿色更敏感
+      var dist = 0.299 * dr * dr + 0.587 * dg * dg + 0.114 * db * db;
       
       if (dist < minDist) {
         minDist = dist;

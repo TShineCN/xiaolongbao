@@ -17,13 +17,14 @@
         body {
             background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
             background-size: 400% 400%;
-            animation: gradientBG 15s ease infinite;
-            min-height: 100vh;
+            animation: gradientBG 20s ease infinite;
+            height: 100vh;
             position: relative;
             color: white;
-            overflow-x: hidden;
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch; /* iOS 滑动优化 */
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         @keyframes gradientBG {
@@ -33,27 +34,43 @@
         }
 
         .background-text {
-            position: absolute;
-            font-size: 20vw;
-            font-weight: 900;
-            opacity: 0.05;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
             z-index: -1;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            white-space: nowrap;
+            overflow: hidden;
+            pointer-events: none;
             user-select: none;
+        }
+        
+        .background-text::before {
+            content: "小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧 小笼包真浅草吧";
+            position: absolute;
+            top: -145%;
+            left: -20%;
+            width: 300%;
+            height: 300%;
+            font-size: 6vw;
+            font-weight: 900;
+            color: rgba(255, 255, 255, 0.1);
+            transform: rotate(-30deg);
+            line-height: 2;
+            word-spacing: 2em;
+            white-space: pre-wrap;
+            overflow: hidden;
         }
 
         .container {
             display: flex;
+            width: 95vw;
+            height: 90vh;
             max-width: 1400px;
-            min-height: 90vh;
-            margin: 5vh auto;
-            background: rgba(0, 0, 0, 0.7);
+            background: rgba(0, 0, 0, 0.4);
             border-radius: 20px;
             box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
-            backdrop-filter: blur(10px);
+            backdrop-filter: blur(7px);
         }
 
         .preview-area {
@@ -82,9 +99,9 @@
             padding: 30px;
             display: flex;
             flex-direction: column;
-            gap: 25px;
+            gap: 20px;
             overflow-y: auto;
-            max-height: 90vh;
+            height: 100%;
         }
         
         /* 自定义滚动条样式 */
@@ -110,8 +127,27 @@
             text-align: center;
             margin-bottom: 10px;
             font-size: 28px;
-            color: #ffcc00;
-            text-shadow: 0 0 10px rgba(255, 204, 0, 0.5);
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4, #45b7d1, #96ceb4, #ffc107, #e056fd);
+            background-size: 400% 400%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            animation: gradientShift 3s ease-in-out infinite;
+            text-shadow: 0 0 20px rgba(255, 107, 107, 0.5), 
+                         0 0 30px rgba(78, 205, 196, 0.3), 
+                         0 0 40px rgba(69, 183, 209, 0.2);
+            filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.3));
+            font-weight: bold;
+            letter-spacing: 2px;
+        }
+        
+        @keyframes gradientShift {
+            0%, 100% {
+                background-position: 0% 50%;
+            }
+            50% {
+                background-position: 100% 50%;
+            }
         }
 
         .animation-selector {
@@ -156,14 +192,16 @@
         }
 
         .upload-area {
-            border: 2px dashed #4a86e8;
+            border: 3px dashed #4a86e8;
             border-radius: 10px;
-            padding: 30px;
+            padding: 8px;
             text-align: center;
-            margin: 15px 0;
+            margin: 10px 0;
             cursor: pointer;
             transition: all 0.3s;
             background: rgba(74, 134, 232, 0.1);
+            max-width: 400px;
+            margin: 20px auto;
         }
 
         .upload-area:hover {
@@ -171,15 +209,25 @@
         }
 
         .upload-icon {
-            font-size: 50px;
-            margin-bottom: 15px;
+            font-size: 24px;
+            margin-bottom: 5px;
             color: #4a86e8;
+        }
+        
+        .upload-area p {
+            margin: 3px 0;
+            font-size: 14px;
+        }
+        
+        .upload-area p.small {
+            font-size: 12px;
+            color: #aaa;
         }
 
         .action-buttons {
             display: flex;
             gap: 15px;
-            margin-top: 10px;
+            margin-top: 20px;
         }
 
         .action-btn {
@@ -245,27 +293,28 @@
         /* 响应式设计 */
         @media (max-width: 1200px) {
             .container {
-                margin: 2vh 20px;
-                max-width: none;
+                width: 98vw;
+                height: 95vh;
             }
         }
 
         @media (max-width: 900px) {
             .container {
                 flex-direction: column;
-                min-height: auto;
-                margin: 20px 10px;
+                width: 98vw;
+                height: 95vh;
             }
             
             .preview-area {
-                height: 40vh;
-                min-height: 300px;
+                flex: 1;
+                height: 40%;
                 border-right: none;
                 border-bottom: 1px solid rgba(255, 255, 255, 0.1);
             }
             
             .control-panel {
-                max-height: none;
+                flex: 1;
+                height: 60%;
                 padding: 20px;
             }
             
@@ -282,17 +331,18 @@
 
         @media (max-width: 600px) {
             .container {
-                margin: 10px 5px;
+                width: 99vw;
+                height: 98vh;
                 border-radius: 15px;
             }
             
             .preview-area {
-                height: 35vh;
-                min-height: 250px;
+                height: 35%;
                 padding: 15px;
             }
             
             .control-panel {
+                height: 65%;
                 padding: 15px;
                 gap: 15px;
             }
@@ -333,8 +383,11 @@
             }
             
             .preview-area {
-                height: 30vh;
-                min-height: 200px;
+                height: 30%;
+            }
+            
+            .control-panel {
+                height: 70%;
             }
             
             .panel-title {
@@ -417,7 +470,7 @@
     </style>
 </head>
 <body>
-    <div class="background-text">ANIMATION</div>
+    <div class="background-text"></div>
     
     <div class="container">
         <div class="preview-area">
@@ -429,40 +482,44 @@
             <h2 class="panel-title">小笼包的玩法大全</h2>
             
             <div class="animation-selector">
-                <h3>选择玩法♥</h3>
+                <h3>💗选择玩法💗</h3>
                 <div class="animation-buttons" id="animationButtons">
                     <!-- 按钮将通过JavaScript动态生成 -->
                 </div>
-            </div>
-            
-            <div class="upload-section">
-                <h3>上传主人图片♥</h3>
+                
                 <div class="upload-area" id="uploadArea">
-                    <div class="upload-icon">📁</div>
-                    <p>点击或拖放图片到此处</p>
-                    <p class="small">支持 JPG, PNG 格式图片</p>
+                    <div class="upload-icon">🤴</div>
+                    <p>点击或拖放</p>
+                    <p class="small">小笼包主人照片</p>
                 </div>
                 <img id="userImagePreview" class="user-image-preview" alt="用户上传的图片">
                 <input type="file" id="imageUpload" accept="image/*" style="display: none;">
-                
-                <div class="position-info">
-                    <p>位置已预设，无需手动调整</p>
+                <!--<div class="position-info">
                     <p id="framePositionInfo">当前帧位置: (400, 225) 旋转: 0°</p>
-                </div>
+                </div>-->
             </div>
             
             <div class="speed-control">
                 <h3>慢玩or冲刺</h3>
-                <div class="speed-display" id="speedDisplay">1.0x 速度 (200ms/帧)</div>
+                
+                <div class="speed-display" id="speedDisplay" style="margin-top: 15px;">1.0x 速度 (200ms/帧)</div>
                 <input type="range" class="speed-slider" id="speedSlider" 
                        min="0.1" max="10" step="0.1" value="1">
                 <div class="speed-info">
                     <span>0.1x (慢)</span>
                     <span>10x (快)</span>
                 </div>
+                
+                <div class="speed-display" id="qualityDisplay" style="margin-top: 15px;">最高品质 (无噪点)</div>
+                <input type="range" class="speed-slider" id="qualitySlider" 
+                       min="1" max="30" step="1" value="30">
+                <div class="speed-info">
+                    <span>最低品质</span>
+                    <span>最高品质</span>
+                </div>
             </div>
             
-            <div class="action-buttons">
+            <div class="action-buttons" style="margin-top: 5px;">
                 <button class="action-btn play-btn" id="testBtn">测试合成图片</button>
                 <button class="action-btn save-btn" id="saveBtn">保存为GIF</button>
             </div>
@@ -670,6 +727,7 @@
             frameInterval: null,
             composedFrames: {},
             playSpeed: 1.0, // 播放速度倍数，1.0 = 200ms/帧
+            gifQuality: 30, // GIF品质 (1-30, 数字越小品质越高)
             gif: null // gif.js实例
         };
 
@@ -690,6 +748,7 @@
             setupButtons();
             setupEventListeners();
             setupSpeedControl();
+            setupQualityControl();
             preloadFrameImages();
             renderFrame(0);
             // 自动开始播放动画
@@ -781,7 +840,7 @@
                         console.log(`图片加载成功: ${url}`);
                         dom.statusText.textContent = `加载中: ${anim.name} (${i+1}/${anim.frameCount})`;
                         if (i === anim.frameCount - 1) {
-                            dom.statusText.textContent = `${anim.name} 加载完成`;
+                            dom.statusText.textContent = `快开始迫害小笼包吧！`;
                         }
                     };
                     
@@ -839,6 +898,41 @@
                 
                 console.log(`速度调整为: ${speed}x, 帧间隔: ${frameTime}ms`);
             });
+        }
+
+        // 设置品质控制
+        function setupQualityControl() {
+            const qualitySlider = document.getElementById('qualitySlider');
+            const qualityDisplay = document.getElementById('qualityDisplay');
+            
+            qualitySlider.addEventListener('input', (e) => {
+                const sliderValue = parseInt(e.target.value);
+                // 反转值：滑条从左到右（1-30），实际品质从低到高（30-1）
+                const quality = 31 - sliderValue;
+                state.gifQuality = quality;
+                
+                // 更新显示
+                let qualityText;
+                if (quality <= 3) {
+                    qualityText = '最高品质';
+                } else if (quality <= 10) {
+                    qualityText = '高品质';
+                } else if (quality <= 20) {
+                    qualityText = '中品质';
+                } else {
+                    qualityText = '低品质';
+                }
+                
+                qualityDisplay.textContent = `${qualityText} (${quality})`;
+                
+                console.log(`GIF品质调整为: ${quality}, 描述: ${qualityText}`);
+            });
+            
+            // 初始化显示
+            const initialSliderValue = parseInt(qualitySlider.value);
+            const initialQuality = 31 - initialSliderValue;
+            state.gifQuality = initialQuality;
+            qualityDisplay.textContent = '最高品质 (' + initialQuality + ')';
         }
 
         // 设置事件监听器
@@ -1157,7 +1251,7 @@
                 // 创建gif.js实例
                 const gif = new GIF({
                     workers: 0, // 不使用web workers
-                    quality: 10,
+                    quality: state.gifQuality, // 用户选择的品质 (1-30, 数字越小品质越高)
                     width: canvasWidth,
                     height: canvasHeight,
                     repeat: 0, // 无限循环
