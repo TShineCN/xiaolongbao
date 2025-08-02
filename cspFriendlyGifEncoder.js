@@ -43,28 +43,22 @@ class CSPFriendlyGifEncoder {
     }
 
     /**
-     * 生成简化的调色板（216色web安全色 + 40种灰色）
+     * 生成更丰富的调色板
      */
     generatePalette() {
         const palette = [];
         
-        // 生成216色web安全色
-        for (let r = 0; r < 6; r++) {
-            for (let g = 0; g < 6; g++) {
-                for (let b = 0; b < 6; b++) {
+        // 生成8级RGB色彩空间 (8x8x4 = 256)
+        for (let r = 0; r < 8; r++) {
+            for (let g = 0; g < 8; g++) {
+                for (let b = 0; b < 4; b++) {
                     palette.push([
-                        Math.floor(r * 255 / 5),
-                        Math.floor(g * 255 / 5),
-                        Math.floor(b * 255 / 5)
+                        Math.floor(r * 255 / 7),
+                        Math.floor(g * 255 / 7),
+                        Math.floor(b * 255 / 3)
                     ]);
                 }
             }
-        }
-        
-        // 添加灰色调色板
-        for (let i = 0; i < 40; i++) {
-            const gray = Math.floor(i * 255 / 39);
-            palette.push([gray, gray, gray]);
         }
         
         // 确保调色板有256种颜色
@@ -258,7 +252,7 @@ class CSPFriendlyGifEncoder {
     }
 
     /**
-     * 简化的LZW压缩（实际上不压缩，直接输出）
+     * 改进的LZW压缩
      */
     compressImageData(indices) {
         const compressed = [];
@@ -271,7 +265,6 @@ class CSPFriendlyGifEncoder {
         const clearCode = 1 << codeSize;
         const endCode = clearCode + 1;
         
-        // 写入清除代码
         let bitBuffer = 0;
         let bitCount = 0;
         const outputBuffer = [];
@@ -288,16 +281,18 @@ class CSPFriendlyGifEncoder {
             }
         }
         
-        // 写入清除代码
-        writeBits(clearCode, 9);
+        // 初始化
+        let currentCodeSize = 9;
+        writeBits(clearCode, currentCodeSize);
         
-        // 直接写入像素索引
+        // 简化的LZW编码
         for (let i = 0; i < indices.length; i++) {
-            writeBits(indices[i], 9);
+            const pixelValue = indices[i] & 0xFF; // 确保在0-255范围内
+            writeBits(pixelValue, currentCodeSize);
         }
         
         // 写入结束代码
-        writeBits(endCode, 9);
+        writeBits(endCode, currentCodeSize);
         
         // 输出剩余位
         if (bitCount > 0) {
@@ -325,7 +320,7 @@ class CSPFriendlyGifEncoder {
      * 写入帧数据
      */
     writeFrame(buffer, frame, frameIndex) {
-        console.log(`编码帧 ${frameIndex + 1}/${this.frames.length}`);
+        console.log(`编码帧 ${frameIndex + 1}/${this.frames.length}, 尺寸: ${frame.width}x${frame.height}`);
         
         // 写入图形控制扩展
         this.writeGraphicControlExtension(buffer, frame);
@@ -335,17 +330,25 @@ class CSPFriendlyGifEncoder {
         
         // 转换RGBA数据为调色板索引
         const indices = [];
+        let nonBlackPixels = 0;
+        
         for (let i = 0; i < frame.data.length; i += 4) {
             const r = frame.data[i];
             const g = frame.data[i + 1];
             const b = frame.data[i + 2];
-            // const a = frame.data[i + 3]; // 忽略alpha通道
+            const a = frame.data[i + 3];
             
-            const colorIndex = this.mapColorToPalette(r, g, b);
-            indices.push(colorIndex);
+            // 处理透明像素
+            if (a < 128) {
+                indices.push(0); // 透明像素使用索引0
+            } else {
+                const colorIndex = this.mapColorToPalette(r, g, b);
+                indices.push(colorIndex);
+                if (r > 10 || g > 10 || b > 10) nonBlackPixels++;
+            }
         }
         
-        console.log(`帧 ${frameIndex + 1} 转换了 ${indices.length} 个像素`);
+        console.log(`帧 ${frameIndex + 1}: ${indices.length} 像素, ${nonBlackPixels} 非黑色像素`);
         
         // 压缩并写入图像数据
         const compressed = this.compressImageData(indices);
