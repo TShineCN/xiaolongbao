@@ -241,13 +241,33 @@
         }
 
         .play-btn {
-            background: linear-gradient(to right, #00b09b, #96c93d);
+            background: linear-gradient(to right, #a8fff1, #aaf130);
             color: white;
+            font-size: 18px;
+            text-shadow: 
+                -1px -1px 0 black,
+                1px -1px 0 black,
+                -1px 1px 0 black,
+                1px 1px 0 black,
+                -2px 0 0 black,
+                2px 0 0 black,
+                0 -2px 0 black,
+                0 2px 0 black;
         }
 
         .save-btn {
-            background: linear-gradient(to right, #ff416c, #ff4b2b);
+            background: linear-gradient(to right, #aaf130, #ffe600);
             color: white;
+            font-size: 18px;
+            text-shadow: 
+                -1px -1px 0 black,
+                1px -1px 0 black,
+                -1px 1px 0 black,
+                1px 1px 0 black,
+                -2px 0 0 black,
+                2px 0 0 black,
+                0 -2px 0 black,
+                0 2px 0 black;
         }
 
         .action-btn:hover {
@@ -419,6 +439,22 @@
             padding: 20px;
             border-radius: 15px;
             margin-bottom: 15px;
+            position: relative;
+        }
+        
+        .speed-emoji {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            font-size: 40px;
+            transition: all 0.3s ease;
+            filter: drop-shadow(0 0 10px rgba(255, 255, 255, 0.3));
+            animation: emojiFloat 2s ease-in-out infinite;
+        }
+        
+        @keyframes emojiFloat {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-3px); }
         }
         
         .speed-slider {
@@ -463,9 +499,12 @@
         
         .speed-display {
             text-align: center;
-            color: #ffcc00;
+            color: #ffffff;
             font-weight: bold;
             margin-bottom: 10px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
         }
     </style>
 </head>
@@ -474,7 +513,7 @@
     
     <div class="container">
         <div class="preview-area">
-            <div class="preview-title">预览区域 - <span id="animName">玩法1</span></div>
+            <div class="preview-title">预览 - <span id="animName">玩法1</span></div>
             <canvas id="previewCanvas" class="preview-canvas" width="800" height="450"></canvas>
         </div>
         
@@ -500,24 +539,25 @@
             </div>
             
             <div class="speed-control">
-                <h3>慢玩or冲刺</h3>
+                <h3>💗慢玩or刺激💗</h3>
+                <div class="speed-emoji" id="speedEmoji">😜</div>
                 
                 <div class="speed-display" id="speedDisplay" style="margin-top: 15px;">1.0x 速度 (200ms/帧)</div>
                 <input type="range" class="speed-slider" id="speedSlider" 
                        min="0.1" max="10" step="0.1" value="1">
                 <div class="speed-info">
-                    <span>0.1x (慢)</span>
-                    <span>10x (快)</span>
+                    <span>慢慢插</span>
+                    <span>狠狠插</span>
                 </div>
                 
             </div>
             
             <div class="action-buttons" style="margin-top: 5px;">
-                <button class="action-btn play-btn" id="testBtn">测试合成图片</button>
+                <button class="action-btn play-btn" id="testBtn">保存为图片</button>
                 <button class="action-btn save-btn" id="saveBtn">保存为GIF</button>
             </div>
             
-            <div class="status-text" id="statusText">准备好创建您的动画！</div>
+            <div class="status-text" id="statusText">准备好创建动画</div>
             <!-- 新增进度条 -->
             <div class="progress-container" id="progressContainer">
                 <div class="progress-bar" id="progressBar"></div>
@@ -707,7 +747,8 @@
             progressContainer: document.getElementById('progressContainer'),
             progressBar: document.getElementById('progressBar'),
             speedSlider: document.getElementById('speedSlider'),
-            speedDisplay: document.getElementById('speedDisplay')
+            speedDisplay: document.getElementById('speedDisplay'),
+            speedEmoji: document.getElementById('speedEmoji')
         };
 
         // 应用状态
@@ -739,6 +780,10 @@
             setupButtons();
             setupEventListeners();
             setupSpeedControl();
+            
+            // 初始化速度显示
+            updateSpeedDisplay(1.0);
+            
             preloadFrameImages();
             renderFrame(0);
             // 自动开始播放动画
@@ -830,7 +875,7 @@
                         console.log(`图片加载成功: ${url}`);
                         dom.statusText.textContent = `加载中: ${anim.name} (${i+1}/${anim.frameCount})`;
                         if (i === anim.frameCount - 1) {
-                            dom.statusText.textContent = `快开始迫害小笼包吧！`;
+                            dom.statusText.textContent = `快来迫害小笼包吧！`;
                         }
                     };
                     
@@ -870,6 +915,59 @@
             });
         }
 
+        // 更新速度显示（通用函数）
+        function updateSpeedDisplay(speed) {
+            // 计算颜色渐变 (白色到粉色)
+            const colorRatio = Math.min((speed - 0.1) / 9.9, 1); // 0到1的比例
+            const red = Math.round(255);
+            const green = Math.round(255 * (1 - colorRatio * 0.4)); // 白色到粉色过渡
+            const blue = Math.round(255 * (1 - colorRatio * 0.1));
+            const textColor = `rgb(${red}, ${green}, ${blue})`;
+            
+            // 根据速度选择emoji
+            let emoji = '😜';
+            if (speed <= 1) {
+                emoji = '🤭'; 
+            } else if (speed <= 2) {
+                emoji = '😏'; // 正常
+            } else if (speed <= 3) {
+                emoji = '😙'; 
+            } else if (speed <= 4) {
+                emoji = '🤤'; 
+            } else if (speed <= 5) {
+                emoji = '😋'; 
+            } else if (speed <= 6) {
+                emoji = '🥰'; 
+            } else if (speed <= 7) {
+                emoji = '😍'; 
+            } else if (speed <= 8) {
+                emoji = '🥵'; 
+            } else if (speed <= 9) {
+                emoji = '😰'; 
+            } else {
+                emoji = '😭'; 
+            }
+            
+            // 更新文字显示（不包含emoji）
+            const frameTime = Math.round(200 / speed);
+            dom.speedDisplay.textContent = `${speed.toFixed(1)}x 速度 (${frameTime}ms/帧)`;
+            dom.speedDisplay.style.color = textColor;
+            
+            // 更新独立的emoji显示
+            dom.speedEmoji.textContent = emoji;
+            
+            // 添加动态发光效果
+            const glowIntensity = colorRatio * 40;
+            dom.speedDisplay.style.textShadow = `0 0 ${glowIntensity}px rgba(255, 0, 255, ${colorRatio * 0.8})`;
+            
+            // 为emoji添加动态效果
+            const emojiScale = 1 + (colorRatio * 0.3); // 1.0到1.3的缩放
+            dom.speedEmoji.style.transform = `scale(${emojiScale})`;
+            //dom.speedEmoji.style.filter = `drop-shadow(0 0 ${glowIntensity/2}px rgba(255, 0, 255, ${colorRatio * 0.6}))`;
+            
+            console.log(`速度显示更新: ${speed}x, 颜色: ${textColor}, emoji: ${emoji}, 缩放: ${emojiScale}`);
+        }
+        
         // 设置速度控制
         function setupSpeedControl() {
             dom.speedSlider.addEventListener('input', (e) => {
@@ -877,16 +975,13 @@
                 state.playSpeed = speed;
                 
                 // 更新显示
-                const frameTime = Math.round(200 / speed);
-                dom.speedDisplay.textContent = `${speed.toFixed(1)}x 速度 (${frameTime}ms/帧)`;
+                updateSpeedDisplay(speed);
                 
                 // 如果正在播放，重新启动动画以应用新速度
                 if (state.isPlaying) {
                     stopAnimation();
                     startAnimation();
                 }
-                
-                console.log(`速度调整为: ${speed}x, 帧间隔: ${frameTime}ms`);
             });
         }
 
